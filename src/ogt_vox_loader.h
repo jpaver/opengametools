@@ -68,7 +68,15 @@
 #ifndef OGT_VOX_LOADER_H__
 #define OGT_VOX_LOADER_H__
 
+#if _MSC_VER == 1400	
+	// VS2005 doesn't have inttypes or stdint so we just define what we need here.
+	typedef unsigned char uint8_t;
+	typedef signed int    int32_t;
+	typedef unsigned int  uint32_t;
+	#define UINT32_MAX	0xFFFFFFFF
+#else
     #include <inttypes.h>
+#endif
 
     // color
     struct ogt_vox_rgba
@@ -161,7 +169,20 @@
     #include <stdio.h>
     
     // MAKE_VOX_CHUNK_ID: used to construct a literal to describe a chunk in a .vox file.
-    #define MAKE_VOX_CHUNK_ID(str)     ( (str[0]<<0) | (str[1]<<8) | (str[2]<<16) | (str[3]<<24) )
+    #define MAKE_VOX_CHUNK_ID(c0,c1,c2,c3)     ( (c0<<0) | (c1<<8) | (c2<<16) | (c3<<24) )
+
+	static const uint32_t CHUNK_ID_VOX_ = MAKE_VOX_CHUNK_ID('V','O','X',' ');
+	static const uint32_t CHUNK_ID_MAIN = MAKE_VOX_CHUNK_ID('M','A','I','N');
+	static const uint32_t CHUNK_ID_SIZE = MAKE_VOX_CHUNK_ID('S','I','Z','E');
+	static const uint32_t CHUNK_ID_XYZI = MAKE_VOX_CHUNK_ID('X','Y','Z','I');
+	static const uint32_t CHUNK_ID_RGBA = MAKE_VOX_CHUNK_ID('R','G','B','A');
+	static const uint32_t CHUNK_ID_nTRN = MAKE_VOX_CHUNK_ID('n','T','R','N');
+	static const uint32_t CHUNK_ID_nGRP = MAKE_VOX_CHUNK_ID('n','G','R','P');
+	static const uint32_t CHUNK_ID_nSHP = MAKE_VOX_CHUNK_ID('n','S','H','P');
+	static const uint32_t CHUNK_ID_IMAP = MAKE_VOX_CHUNK_ID('I','M','A','P');
+	static const uint32_t CHUNK_ID_LAYR = MAKE_VOX_CHUNK_ID('L','A','Y','R');
+	static const uint32_t CHUNK_ID_MATL = MAKE_VOX_CHUNK_ID('M','A','T','L');
+	static const uint32_t CHUNK_ID_MATT = MAKE_VOX_CHUNK_ID('M','A','T','T');
 
     // Some older .vox files will not store a palette, in which case the following palette will be used!
     static const uint8_t k_default_vox_palette[256 * 4] = {
@@ -198,7 +219,6 @@
         0x00, 0x00, 0x77, 0xff, 0x00, 0x00, 0x55, 0xff, 0x00, 0x00, 0x44, 0xff, 0x00, 0x00, 0x22, 0xff, 0x00, 0x00, 0x11, 0xff, 0xee, 0xee, 0xee, 0xff, 0xdd, 0xdd, 0xdd, 0xff, 0xbb, 0xbb, 0xbb, 0xff,
         0xaa, 0xaa, 0xaa, 0xff, 0x88, 0x88, 0x88, 0xff, 0x77, 0x77, 0x77, 0xff, 0x55, 0x55, 0x55, 0xff, 0x44, 0x44, 0x44, 0xff, 0x22, 0x22, 0x22, 0xff, 0x11, 0x11, 0x11, 0xff, 0x00, 0x00, 0x00, 0xff,
     };
-    static_assert(sizeof(ogt_vox_palette) == sizeof(k_default_vox_palette), "");
 
     // internal math/helper utilities
     static inline uint32_t _vox_max(uint32_t a, uint32_t b) { 
@@ -679,7 +699,7 @@
         uint32_t file_version;
         _vox_file_read(fp, &file_header, sizeof(uint32_t));
         _vox_file_read(fp, &file_version, sizeof(uint32_t));
-        if (file_header != MAKE_VOX_CHUNK_ID("VOX ") || file_version != 150)
+        if (file_header != CHUNK_ID_VOX_ || file_version != 150)
             return NULL;
 
         // parse chunks until we reach the end of the file/buffer
@@ -696,12 +716,12 @@
             // process the chunk.
             switch (chunk_id)
             {
-                case MAKE_VOX_CHUNK_ID("MAIN"):
+				case CHUNK_ID_MAIN:
                 {
                     assert(chunk_size == 0);
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("SIZE"):
+				case CHUNK_ID_SIZE:
                 {
                     assert(chunk_size == 12 && chunk_child_size == 0);
                     _vox_file_read(fp, &size_x, sizeof(uint32_t));
@@ -709,7 +729,7 @@
                     _vox_file_read(fp, &size_z, sizeof(uint32_t));
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("XYZI"):
+				case CHUNK_ID_XYZI:
                 {
                     assert(chunk_child_size == 0 && size_x && size_y && size_z);    // must have read a SIZE chunk prior to XYZI.
                     // read the number of voxels to process for this moodel
@@ -755,13 +775,13 @@
                     }
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("RGBA"):
+				case CHUNK_ID_RGBA:
                 {
                     assert(chunk_size == sizeof(palette));
                     _vox_file_read(fp, &palette, sizeof(palette));
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("nTRN"):
+				case CHUNK_ID_nTRN:
                 {
                     uint32_t node_id;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
@@ -817,7 +837,7 @@
                     }
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("nGRP"):
+                case CHUNK_ID_nGRP:
                 {
                     uint32_t node_id;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
@@ -847,7 +867,7 @@
                     }
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("nSHP"):
+				case CHUNK_ID_nSHP:
                 {
                     uint32_t node_id;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
@@ -873,14 +893,14 @@
                     _vox_file_read_dict(&dict, fp);
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("IMAP"):
+				case CHUNK_ID_IMAP:
                 {
                     assert(chunk_size == 256);
                     _vox_file_read(fp, index_map, 256);
                     found_index_map_chunk = true;
                     break;
                 }
-                case MAKE_VOX_CHUNK_ID("LAYR"):
+				case CHUNK_ID_LAYR:
                 {
                     int32_t layer_id = 0;
                     int32_t reserved_id = 0;
@@ -908,8 +928,8 @@
                     break;
                 }
                 // we don't handle MATL/MATT or any other chunks for now, so we just skip the chunk payload.
-                case MAKE_VOX_CHUNK_ID("MATL"):
-                case MAKE_VOX_CHUNK_ID("MATT"):
+                case CHUNK_ID_MATL:
+				case CHUNK_ID_MATT:
                 default:
                 {
                     _vox_file_seek_forwards(fp, chunk_size);
@@ -1007,7 +1027,7 @@
                     continue;
                 // model i and model j are the same, so free model j and keep model i.
                 _vox_free(model_ptrs[j]);
-                model_ptrs[j] = nullptr;
+                model_ptrs[j] = NULL;
                 // remap all instances that were referring to j to now refer to i.
                 for (uint32_t k = 0; k < instances.size(); k++)
                     if (instances[k].model_index == j)
