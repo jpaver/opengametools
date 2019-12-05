@@ -9,7 +9,7 @@
 */
 
 #define OGT_VOX_IMPLEMENTATION
-#include "..\src\ogt_vox_loader.h"
+#include "..\src\ogt_vox.h"
 #include <io.h>
 
 
