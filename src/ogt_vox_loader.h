@@ -21,7 +21,7 @@
     2. load a .vox file into a memory buffer. 
        
     3. construct a scene:
-       ogt_vox_scene* scene = ogt_vox_create_scene(buffer, buffer_size);
+       ogt_vox_scene* scene = ogt_vox_read_scene(buffer, buffer_size);
 
     4. use the scene members to acquire the information you need. eg.
        printf("# of layers: %u\n", scene->num_layers );
@@ -69,11 +69,11 @@
 #define OGT_VOX_LOADER_H__
 
 #if _MSC_VER == 1400	
-	// VS2005 doesn't have inttypes or stdint so we just define what we need here.
-	typedef unsigned char uint8_t;
-	typedef signed int    int32_t;
-	typedef unsigned int  uint32_t;
-	#define UINT32_MAX	0xFFFFFFFF
+    // VS2005 doesn't have inttypes or stdint so we just define what we need here.
+    typedef unsigned char uint8_t;
+    typedef signed int    int32_t;
+    typedef unsigned int  uint32_t;
+    #define UINT32_MAX	0xFFFFFFFF
 #else
     #include <inttypes.h>
 #endif
@@ -81,7 +81,7 @@
     // color
     struct ogt_vox_rgba
     {
-	    uint8_t r,g,b,a;            // red, green, blue and alpha components of a color.
+        uint8_t r,g,b,a;            // red, green, blue and alpha components of a color.
     };
 
     // column-major 4x4 matrix
@@ -149,10 +149,16 @@
 
     // creates a scene from a vox file within a memory buffer of a given size.
     // you can destroy the input buffer once you have the scene as this function will allocate separate memory for the scene objecvt.
-    const ogt_vox_scene* ogt_vox_create_scene(const uint8_t* buffer, uint32_t buffer_size);
+    const ogt_vox_scene* ogt_vox_read_scene(const uint8_t* buffer, uint32_t buffer_size);
 
     // destroys a scene object to release its memory.
     void ogt_vox_destroy_scene(const ogt_vox_scene* scene);
+
+    // writes the scene to a new buffer and returns the buffer size. free the buffer with ogt_vox_free
+    uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t& buffer_size);
+
+    // frees a buffer returned by ogt_vox_write_scene
+    void     ogt_vox_free(void* mem);
 
 #endif // OGT_VOX_LOADER_H__
 
@@ -171,18 +177,18 @@
     // MAKE_VOX_CHUNK_ID: used to construct a literal to describe a chunk in a .vox file.
     #define MAKE_VOX_CHUNK_ID(c0,c1,c2,c3)     ( (c0<<0) | (c1<<8) | (c2<<16) | (c3<<24) )
 
-	static const uint32_t CHUNK_ID_VOX_ = MAKE_VOX_CHUNK_ID('V','O','X',' ');
-	static const uint32_t CHUNK_ID_MAIN = MAKE_VOX_CHUNK_ID('M','A','I','N');
-	static const uint32_t CHUNK_ID_SIZE = MAKE_VOX_CHUNK_ID('S','I','Z','E');
-	static const uint32_t CHUNK_ID_XYZI = MAKE_VOX_CHUNK_ID('X','Y','Z','I');
-	static const uint32_t CHUNK_ID_RGBA = MAKE_VOX_CHUNK_ID('R','G','B','A');
-	static const uint32_t CHUNK_ID_nTRN = MAKE_VOX_CHUNK_ID('n','T','R','N');
-	static const uint32_t CHUNK_ID_nGRP = MAKE_VOX_CHUNK_ID('n','G','R','P');
-	static const uint32_t CHUNK_ID_nSHP = MAKE_VOX_CHUNK_ID('n','S','H','P');
-	static const uint32_t CHUNK_ID_IMAP = MAKE_VOX_CHUNK_ID('I','M','A','P');
-	static const uint32_t CHUNK_ID_LAYR = MAKE_VOX_CHUNK_ID('L','A','Y','R');
-	static const uint32_t CHUNK_ID_MATL = MAKE_VOX_CHUNK_ID('M','A','T','L');
-	static const uint32_t CHUNK_ID_MATT = MAKE_VOX_CHUNK_ID('M','A','T','T');
+    static const uint32_t CHUNK_ID_VOX_ = MAKE_VOX_CHUNK_ID('V','O','X',' ');
+    static const uint32_t CHUNK_ID_MAIN = MAKE_VOX_CHUNK_ID('M','A','I','N');
+    static const uint32_t CHUNK_ID_SIZE = MAKE_VOX_CHUNK_ID('S','I','Z','E');
+    static const uint32_t CHUNK_ID_XYZI = MAKE_VOX_CHUNK_ID('X','Y','Z','I');
+    static const uint32_t CHUNK_ID_RGBA = MAKE_VOX_CHUNK_ID('R','G','B','A');
+    static const uint32_t CHUNK_ID_nTRN = MAKE_VOX_CHUNK_ID('n','T','R','N');
+    static const uint32_t CHUNK_ID_nGRP = MAKE_VOX_CHUNK_ID('n','G','R','P');
+    static const uint32_t CHUNK_ID_nSHP = MAKE_VOX_CHUNK_ID('n','S','H','P');
+    static const uint32_t CHUNK_ID_IMAP = MAKE_VOX_CHUNK_ID('I','M','A','P');
+    static const uint32_t CHUNK_ID_LAYR = MAKE_VOX_CHUNK_ID('L','A','Y','R');
+    static const uint32_t CHUNK_ID_MATL = MAKE_VOX_CHUNK_ID('M','A','T','L');
+    static const uint32_t CHUNK_ID_MATT = MAKE_VOX_CHUNK_ID('M','A','T','T');
 
     // Some older .vox files will not store a palette, in which case the following palette will be used!
     static const uint8_t k_default_vox_palette[256 * 4] = {
@@ -235,6 +241,7 @@
         #define _vox_strcasecmp(a,b)         _stricmp(a,b)
         #define _vox_strcmp(a,b)             strcmp(a,b)
         #define _vox_strlen(a)               strlen(a)
+        #define _vox_sprintf(str,str_max,fmt,...)    sprintf_s(str, str_max, fmt, __VA_ARGS__)
     #else
         #define _vox_str_scanf(str,...)      scanf_s(str,__VA_ARGS__)
         #define _vox_strcpy_static(dst,src)  strcpy(dst,src)
@@ -578,7 +585,7 @@
         } u;
     };
 
-    void generate_instances_for_node(
+    static void generate_instances_for_node(
         const _vox_array<_vox_scene_node_> & nodes, uint32_t node_index, const _vox_array<uint32_t> & child_id_array, uint32_t layer_index, 
         const ogt_vox_transform& transform, const _vox_array<ogt_vox_model*> & model_ptrs, const char* transform_last_name, bool transform_last_hidden,
         _vox_array<ogt_vox_instance> & instances, _vox_array<char> & string_data)
@@ -658,7 +665,7 @@
         return memcmp(lhs->voxel_data, rhs->voxel_data, num_voxels_lhs) == 0 ? true : false;
     }
 
-    const ogt_vox_scene* ogt_vox_create_scene(const uint8_t * buffer, uint32_t bufferSize) {
+    const ogt_vox_scene* ogt_vox_read_scene(const uint8_t * buffer, uint32_t bufferSize) {
         _vox_file file = { buffer, bufferSize, 0 };
         _vox_file* fp = &file;
 
@@ -716,12 +723,12 @@
             // process the chunk.
             switch (chunk_id)
             {
-				case CHUNK_ID_MAIN:
+                case CHUNK_ID_MAIN:
                 {
                     assert(chunk_size == 0);
                     break;
                 }
-				case CHUNK_ID_SIZE:
+                case CHUNK_ID_SIZE:
                 {
                     assert(chunk_size == 12 && chunk_child_size == 0);
                     _vox_file_read(fp, &size_x, sizeof(uint32_t));
@@ -729,7 +736,7 @@
                     _vox_file_read(fp, &size_z, sizeof(uint32_t));
                     break;
                 }
-				case CHUNK_ID_XYZI:
+                case CHUNK_ID_XYZI:
                 {
                     assert(chunk_child_size == 0 && size_x && size_y && size_z);    // must have read a SIZE chunk prior to XYZI.
                     // read the number of voxels to process for this moodel
@@ -775,13 +782,13 @@
                     }
                     break;
                 }
-				case CHUNK_ID_RGBA:
+                case CHUNK_ID_RGBA:
                 {
                     assert(chunk_size == sizeof(palette));
                     _vox_file_read(fp, &palette, sizeof(palette));
                     break;
                 }
-				case CHUNK_ID_nTRN:
+                case CHUNK_ID_nTRN:
                 {
                     uint32_t node_id;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
@@ -802,6 +809,7 @@
                         if (hidden_string)
                             hidden = (hidden_string[0] == '1' ? true : false);
                     }
+
 
                     // get other properties.
                     uint32_t child_node_id, reserved_id, layer_id, num_frames;
@@ -867,16 +875,16 @@
                     }
                     break;
                 }
-				case CHUNK_ID_nSHP:
+                case CHUNK_ID_nSHP:
                 {
                     uint32_t node_id;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
 
                     // setup the shape node 
                     nodes.grow_to_fit_index(node_id);
-                    _vox_scene_node_* pShapeNode = &nodes[node_id];
-                    pShapeNode->node_type = k_nodetype_shape;
-                    pShapeNode->u.shape.model_id = UINT32_MAX;
+                    _vox_scene_node_* shape_node = &nodes[node_id];
+                    shape_node->node_type = k_nodetype_shape;
+                    shape_node->u.shape.model_id = UINT32_MAX;
 
                     // parse the node dictionary - data is unused.
                     _vox_file_read_dict(&dict, fp);
@@ -886,21 +894,21 @@
                     assert(num_models == 1); // must be 1 according to the spec.
 
                     // assign instances
-                    _vox_file_read(fp, &pShapeNode->u.shape.model_id, sizeof(uint32_t));
-                    assert(pShapeNode->u.shape.model_id < model_ptrs.size());
+                    _vox_file_read(fp, &shape_node->u.shape.model_id, sizeof(uint32_t));
+                    assert(shape_node->u.shape.model_id < model_ptrs.size());
 
                     // parse the model dictionary - data is unsued.
                     _vox_file_read_dict(&dict, fp);
                     break;
                 }
-				case CHUNK_ID_IMAP:
+                case CHUNK_ID_IMAP:
                 {
                     assert(chunk_size == 256);
                     _vox_file_read(fp, index_map, 256);
                     found_index_map_chunk = true;
                     break;
                 }
-				case CHUNK_ID_LAYR:
+                case CHUNK_ID_LAYR:
                 {
                     int32_t layer_id = 0;
                     int32_t reserved_id = 0;
@@ -929,7 +937,7 @@
                 }
                 // we don't handle MATL/MATT or any other chunks for now, so we just skip the chunk payload.
                 case CHUNK_ID_MATL:
-				case CHUNK_ID_MATT:
+                case CHUNK_ID_MATT:
                 default:
                 {
                     _vox_file_seek_forwards(fp, chunk_size);
@@ -1148,6 +1156,321 @@
         _vox_free(scene);
     }
 
+    // the vector should be a unit vector aligned along one of the cardinal directions exactly. eg. (1,0,0) or (0, 0, -1)
+       // this function returns the non-zero column index in out_index and the returns whether that entry is negative.
+    static bool _vox_get_vec3_rotation_bits(const vec3& vec, uint32_t& out_index) {
+        const float* f = &vec.x;
+        out_index = 3;
+        bool is_negative = false;
+        for (uint32_t i = 0; i < 3; i++) {
+            if (f[i] == 1.0f || f[i] == -1.0f) {
+                out_index = i;
+                is_negative = f[i] < 0.0f ? true : false;
+            }
+            else {
+                assert(f[i] == 0.0f);   // must be zero 
+            }
+        }
+        assert(out_index != 3); // if you hit this, you probably have all zeroes in the vector!
+        return is_negative;
+    }
+
+    static uint8_t _vox_make_packed_rotation_from_transform(const ogt_vox_transform * transform) {
+        // magicavoxel stores rows, and we have columns, so we do the swizzle here into rows
+        vec3 row0 = vec3_make(transform->m00, transform->m10, transform->m20);
+        vec3 row1 = vec3_make(transform->m01, transform->m11, transform->m21);
+        vec3 row2 = vec3_make(transform->m02, transform->m12, transform->m22);
+        uint32_t row0_index = 3, row1_index = 3, row2_index = 3;
+        bool row0_negative = _vox_get_vec3_rotation_bits(row0, row0_index);
+        bool row1_negative = _vox_get_vec3_rotation_bits(row1, row1_index);
+        bool row2_negative = _vox_get_vec3_rotation_bits(row2, row2_index);
+        const uint32_t row_mask = (1 << row0_index) | (1 << row1_index) | (1 << row2_index);
+        assert(((1 << row0_index) | (1 << row1_index) | (1 << row2_index)) == 7); // check that rows are orthogonal. There must be a non-zero entry in column 0, 1 and 2 across these 3 rows.
+        return (row0_index) | (row1_index << 2) | (row0_negative ? 1 << 4 : 0) | (row1_negative ? 1 << 5 : 0) | (row2_negative ? 1 << 6 : 0);
+    }
+
+    struct _vox_file_writeable {
+        _vox_array<uint8_t> data;
+    };
+
+    static void _vox_file_writeable_init(_vox_file_writeable* fp) {
+        fp->data.reserve(1024);
+    }
+    static void _vox_file_write(_vox_file_writeable* fp, const void* data, uint32_t data_size) {
+        fp->data.push_back_many((const uint8_t*)data, data_size);
+    }
+    static void _vox_file_write_uint32(_vox_file_writeable* fp, uint32_t data) {
+        fp->data.push_back_many((const uint8_t*)&data, sizeof(uint32_t));
+    }
+    static void _vox_file_write_uint8(_vox_file_writeable* fp, uint8_t data) {
+        fp->data.push_back_many((const uint8_t*)&data, sizeof(uint8_t));
+    }
+    static uint32_t _vox_file_get_offset(const _vox_file_writeable* fp) {
+        return (uint32_t)fp->data.count;
+    }
+    static uint8_t* _vox_file_get_data(_vox_file_writeable* fp) {
+        return &fp->data[0];
+    }
+    static void _vox_file_write_dict_key_value(_vox_file_writeable* fp, const char* key, const char* value) {
+        if (key == NULL || value == NULL)
+            return;
+        uint32_t key_len   = (uint32_t)_vox_strlen(key);
+        uint32_t value_len = (uint32_t)_vox_strlen(value);
+        _vox_file_write_uint32(fp, key_len);
+        _vox_file_write(fp, key, key_len);
+        _vox_file_write_uint32(fp, value_len);
+        _vox_file_write(fp, value, value_len);
+    }
+
+    static uint32_t _vox_dict_key_value_size(const char* key, const char* value) {
+        if (key == NULL || value == NULL)
+            return 0;
+        size_t size = sizeof(uint32_t) + _vox_strlen(key) + sizeof(uint32_t) + _vox_strlen(value);
+        return (uint32_t)size;
+    }
+
+    static void _vox_file_write_chunk_nTRN(_vox_file_writeable* fp, uint32_t node_id, uint32_t child_node_id, const char* name, bool hidden, const ogt_vox_transform* transform, uint32_t layer_id)
+    {
+        // obtain dictionary string pointers
+        const char* hidden_string = hidden ? "1" : NULL;
+        const char* t_string = NULL;
+        const char* r_string = NULL;
+        char t_string_buf[64];
+        char r_string_buf[64];
+        t_string_buf[0] = 0;
+        r_string_buf[0] = 0;
+        if (transform != NULL) {
+            uint8_t packed_rotation_bits = _vox_make_packed_rotation_from_transform(transform);
+            _vox_sprintf(t_string_buf, sizeof(t_string_buf), "%i %i %i", (int32_t)transform->m30, (int32_t)transform->m31, (int32_t)transform->m32);
+            _vox_sprintf(r_string_buf, sizeof(r_string_buf), "%u", packed_rotation_bits);
+            t_string = t_string_buf;
+            r_string = r_string_buf;
+        }
+
+        uint32_t node_dict_size =
+            sizeof(uint32_t) + // num key value pairs
+            _vox_dict_key_value_size("_name",   name) +        
+            _vox_dict_key_value_size("_hidden", hidden_string);
+
+        uint32_t frame_dict_size =
+            sizeof(uint32_t) + // num key value pairs
+            _vox_dict_key_value_size("_t", t_string) +
+            _vox_dict_key_value_size("_r", r_string);
+
+        uint32_t chunk_size_ntrn =
+            sizeof(uint32_t) +   // node_id
+            node_dict_size +     // node dictionary
+            4 * sizeof(uint32_t) + // middle section - 4 uint32s
+            frame_dict_size;
+
+        // write the nTRN header
+        _vox_file_write_uint32(fp, CHUNK_ID_nTRN);
+        _vox_file_write_uint32(fp, chunk_size_ntrn);
+        _vox_file_write_uint32(fp, 0);
+
+        // write the nTRN payload
+        _vox_file_write_uint32(fp, node_id);
+
+        // write the node dictionary
+        uint32_t node_dict_keyvalue_count = (name ? 1 : 0) + (hidden_string ? 1 : 0);
+        _vox_file_write_uint32(fp, node_dict_keyvalue_count);  // num key values
+        _vox_file_write_dict_key_value(fp, "_name", name);
+        _vox_file_write_dict_key_value(fp, "_hidden", hidden_string);
+
+        // get other properties.
+        _vox_file_write_uint32(fp, child_node_id);
+        _vox_file_write_uint32(fp, UINT32_MAX); // reserved_id must have all bits set.
+        _vox_file_write_uint32(fp, layer_id);
+        _vox_file_write_uint32(fp, 1);          // num_frames must be 1
+
+        // write the frame dictionary
+        _vox_file_write_uint32(fp, (r_string ? 1 : 0) + (t_string ? 1 : 0));  // num key values
+        _vox_file_write_dict_key_value(fp, "_r", r_string);
+        _vox_file_write_dict_key_value(fp, "_t", t_string);
+    }
+
+    // saves the scene out to a buffer that can be loaded with magicavoxel.
+    uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t& buffer_size) {
+        _vox_file_writeable file;
+        _vox_file_writeable_init(&file);
+        _vox_file_writeable* fp = &file;
+
+        // write file header and file version
+        _vox_file_write_uint32(fp, CHUNK_ID_VOX_);
+        _vox_file_write_uint32(fp, 150);
+
+        // read the fields common to all chunks
+        uint32_t chunk_id = 0;
+        uint32_t chunk_size = 0;
+        uint32_t chunk_child_size = 0;
+
+        // write the main chunk 
+        _vox_file_write_uint32(fp, CHUNK_ID_MAIN);
+        _vox_file_write_uint32(fp, 0);
+        _vox_file_write_uint32(fp, 0);  // this main_chunk_child_size will get patched up once everything is written.
+
+        // we need to know how to patch up the main chunk size after we've written everything
+        const uint32_t offset_post_main_chunk = _vox_file_get_offset(fp);
+
+        // write out all model chunks
+        for (uint32_t i = 0; i < scene->num_models; i++) {
+            const ogt_vox_model* model = scene->models[i];
+            assert(model->size_x <= 126 && model->size_y <= 126 && model->size_z <= 126);
+            // count the number of solid voxels in the grid
+            uint32_t num_voxels_in_grid = model->size_x * model->size_y * model->size_z;
+            uint32_t num_solid_voxels = 0;
+            for (uint32_t voxel_index = 0; voxel_index < num_voxels_in_grid; voxel_index++)
+                if (model->voxel_data[voxel_index] != 0)
+                    num_solid_voxels++;
+            uint32_t chunk_size_xyzi = sizeof(uint32_t) + 4 * num_solid_voxels;
+
+            // write the SIZE chunk header 
+            _vox_file_write_uint32(fp, CHUNK_ID_SIZE);
+            _vox_file_write_uint32(fp, 12);
+            _vox_file_write_uint32(fp, 0);
+
+            // write the SIZE chunk payload
+            _vox_file_write_uint32(fp, model->size_x);
+            _vox_file_write_uint32(fp, model->size_y);
+            _vox_file_write_uint32(fp, model->size_z);
+
+            // write the XYZI chunk header
+            _vox_file_write_uint32(fp, CHUNK_ID_XYZI);
+            _vox_file_write_uint32(fp, chunk_size_xyzi);
+            _vox_file_write_uint32(fp, 0);
+
+            // write out XYZI chunk payload
+            _vox_file_write_uint32(fp, num_solid_voxels);
+            uint32_t voxel_index = 0;
+            for (uint32_t z = 0; z < model->size_z; z++) {
+                for (uint32_t y = 0; y < model->size_y; y++) {
+                    for (uint32_t x = 0; x < model->size_x; x++, voxel_index++) {
+                        uint8_t color_index = model->voxel_data[voxel_index];
+                        if (color_index != 0) {
+                            _vox_file_write_uint8(fp, (uint8_t)x);
+                            _vox_file_write_uint8(fp, (uint8_t)y);
+                            _vox_file_write_uint8(fp, (uint8_t)z);
+                            _vox_file_write_uint8(fp, color_index);
+                        }
+                    }
+                }
+            }
+        }
+
+        // define our node_id ranges.
+        const uint32_t first_root_transform_node_id     = 0;
+        const uint32_t first_group_node_id              = 1;
+        const uint32_t first_shape_node_id              = 2;
+        const uint32_t first_instance_transform_node_id = first_shape_node_id + scene->num_models;
+
+        // write node 0 nTRN (root transform) 
+        _vox_file_write_chunk_nTRN(fp, first_root_transform_node_id, first_group_node_id, NULL, false, NULL, UINT32_MAX);
+
+        // write node 1 nGRP (root group that references all instance nTRN nodes as children)
+        {
+            uint32_t num_child_nodes = scene->num_instances;
+            uint32_t chunk_size_ngrp =
+                sizeof(uint32_t) +                   // node_id
+                sizeof(uint32_t) +                   // num keyvalue pairs in node dictionary
+                sizeof(uint32_t) +                   // num_child_nodes
+                sizeof(uint32_t) * num_child_nodes;
+            // write the nGRP header
+            _vox_file_write_uint32(fp, CHUNK_ID_nGRP);
+            _vox_file_write_uint32(fp, chunk_size_ngrp);
+            _vox_file_write_uint32(fp, 0);
+            // write the nGRP payload
+            _vox_file_write_uint32(fp, first_group_node_id);  // node_id
+            _vox_file_write_uint32(fp, 0);                    // num keyvalue pairs in node dictionary (empty!)
+            _vox_file_write_uint32(fp, num_child_nodes);
+            for (uint32_t i = 0; i < num_child_nodes; i++)
+                _vox_file_write_uint32(fp, first_instance_transform_node_id + i);
+        }
+
+        // write out an nSHP chunk for all models
+        for (uint32_t i = 0; i < scene->num_models; i++) {
+            // compute the size of the nSHP chunk
+            uint32_t chunk_size_nshp =
+                sizeof(uint32_t) +      // node_id
+                sizeof(uint32_t) +      // num keyvalue pairs in node dictionary
+                sizeof(uint32_t) +      // num_models
+                sizeof(uint32_t) +      // model_id
+                sizeof(uint32_t);       // num keyvalue pairs in model dictionary
+            // write the nSHP chunk header
+            _vox_file_write_uint32(fp, CHUNK_ID_nSHP);
+            _vox_file_write_uint32(fp, chunk_size_nshp);
+            _vox_file_write_uint32(fp, 0);
+            // write the nSHP chunk payload
+            _vox_file_write_uint32(fp, first_shape_node_id + i);    // node_id
+            _vox_file_write_uint32(fp, 0);                          // num keyvalue pairs in node dictionary
+            _vox_file_write_uint32(fp, 1);                          // num_models must be 1
+            _vox_file_write_uint32(fp, i);                          // model_id
+            _vox_file_write_uint32(fp, 0);                          // num keyvalue pairs in model dictionary
+        }
+        // write out an nTRN chunk for all instances - and make them point to an nSHP chunk
+        for (uint32_t i = 0; i < scene->num_instances; i++) {
+            const ogt_vox_instance* instance = &scene->instances[i];
+            uint32_t node_id       = first_instance_transform_node_id + i;
+            uint32_t child_node_id = first_shape_node_id + instance->model_index;
+            _vox_file_write_chunk_nTRN(fp, node_id, child_node_id, instance->name, instance->hidden, &instance->transform, instance->layer_index);
+        }
+
+        // write out RGBA chunk for the palette
+        {
+            // .vox stores palette rotated by 1 color index, so do that now.
+            ogt_vox_palette rotated_palette;
+            for (uint32_t i = 0; i < 256; i++)
+                rotated_palette.color[i] = scene->palette.color[(i + 1) & 255];
+
+            // write the palette chunk header
+            _vox_file_write_uint32(fp, CHUNK_ID_RGBA);
+            _vox_file_write_uint32(fp, sizeof(ogt_vox_palette));
+            _vox_file_write_uint32(fp, 0);
+            // write the palette chunk payload
+            _vox_file_write(fp, &rotated_palette, sizeof(ogt_vox_palette));
+        }
+
+        // write all layer chunks out.
+        for (uint32_t i = 0; i < scene->num_layers; i++) {
+            const char* layer_name_string = scene->layers[i].name;
+            const char* hidden_string = scene->layers[i].hidden ? "1" : NULL;
+            uint32_t layer_chunk_size =
+                sizeof(int32_t) +   // layer_id
+                sizeof(uint32_t) +  // num key value pairs
+                _vox_dict_key_value_size("_name", layer_name_string) +
+                _vox_dict_key_value_size("_hidden", hidden_string) +
+                sizeof(int32_t);    // reserved id, must be -1
+            uint32_t layer_dict_keyvalue_count = (layer_name_string ? 1 : 0) + (hidden_string ? 1 : 0);
+            // write the layer chunk header
+            _vox_file_write_uint32(fp, CHUNK_ID_LAYR);
+            _vox_file_write_uint32(fp, layer_chunk_size);
+            _vox_file_write_uint32(fp, 0);
+            // write the layer chunk payload
+            _vox_file_write_uint32(fp, i);                          // layer_id
+            _vox_file_write_uint32(fp, layer_dict_keyvalue_count);  // num keyvalue pairs in layer dictionary 
+            _vox_file_write_dict_key_value(fp, "_name",   layer_name_string);
+            _vox_file_write_dict_key_value(fp, "_hidden", hidden_string);
+            _vox_file_write_uint32(fp, UINT32_MAX);                 // reserved id
+        }
+        
+        // we deliberately don't free the fp->data field, just pass the buffer pointer and size out to the caller
+        buffer_size = (uint32_t)fp->data.count;
+        uint8_t* buffer_data = _vox_file_get_data(fp);
+        // we deliberately clear this pointer so it doesn't get auto-freed on exiting. The caller will own the memory hereafter.
+        fp->data.data = NULL;
+
+        // patch up the main chunk's child chunk size now that we've written everything we're going to write.
+        {
+            uint32_t* main_chunk_child_size = (uint32_t*)& buffer_data[offset_post_main_chunk - sizeof(uint32_t)];
+            *main_chunk_child_size = buffer_size - offset_post_main_chunk;
+        }
+
+        return buffer_data;
+    }
+    
+    void ogt_vox_free(void* mem)
+    {
+        _vox_free(mem);
+    }
 #endif // #ifdef OGT_VOX_IMPLEMENTATION
 
 /* -------------------------------------------------------------------------------------------------------------------------------------------------

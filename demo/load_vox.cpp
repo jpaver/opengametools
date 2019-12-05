@@ -34,12 +34,40 @@ const ogt_vox_scene* load_vox_scene(const char* pcFilename)
     fclose(fp);
 
     // construct the scene from the buffer
-    const ogt_vox_scene * scene = ogt_vox_create_scene(buffer, buffersize);
+    const ogt_vox_scene * scene = ogt_vox_read_scene(buffer, buffersize);
 
     // the buffer can be safely deleted once the scene is instantiated.
     delete[] buffer;
 
     return scene;
+}
+
+
+// a helper function to save a magica voxel scene to disk.
+void save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene) 
+{
+    // save the scene back out. 
+    uint32_t buffersize = 0;
+    uint8_t* buffer = ogt_vox_write_scene(scene, buffersize);
+    if (!buffer)
+        return;
+
+    // open the file for write
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+    FILE * fp;
+    if (0 != fopen_s(&fp, pcFilename, "wb"))
+        fp = 0;
+#else
+    FILE * fp = fopen(pcFilename, "wb");
+#endif
+    if (!fp) {
+        ogt_vox_free(buffer);
+        return;
+    }
+
+    fwrite(buffer, buffersize, 1, fp);
+    fclose(fp);
+    ogt_vox_free(buffer);
 }
 
 // this example just counts the number of solid voxels in this model, but an importer 
@@ -113,6 +141,8 @@ int main(int argc, char** argv)
                 total_voxel_count,
                 model->voxel_hash);
         }
+
+        save_vox_scene("test_tileset_SAVED.vox", scene); 
 
         ogt_vox_destroy_scene(scene);
     }
