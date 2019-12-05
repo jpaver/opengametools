@@ -1,11 +1,11 @@
 /*
-    load_vox - MIT license - Justin Paver, Oct 2019
+    demo_vox - MIT license - Justin Paver, Oct 2019
 
-    A demonstration program to show you how to use the MagicaVoxelSceneLoader from the 
-    open game tools project: https://github.com/jpaver/opengametools.
+    A demonstration program to show you how to use the MagicaVoxel scene reader and
+    writer from the open game tools project: https://github.com/jpaver/opengametools.
 
-    Please see the MIT license information at the end of this file, and please consider sharing any
-    improvements you make.
+    Please see the MIT license information at the end of this file, and please consider 
+    sharing any improvements you make.
 */
 
 #define OGT_VOX_IMPLEMENTATION

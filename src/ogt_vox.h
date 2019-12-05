@@ -1,9 +1,10 @@
 /*
-    opengametools vox file loader - v0.5 - MIT license - Justin Paver, Oct 2019
+    opengametools vox file reader/writer - v0.6 - MIT license - Justin Paver, Oct 2019
 
     This is a single-header-file library that provides easy-to-use
-    support for loading MagicaVoxel .vox files into structures that
-    are easy to dereference and extract information from.
+    support for reading MagicaVoxel .vox files into structures that
+    are easy to dereference and extract information from. It also
+    supports writing back out to .vox file from those structures.
 
     Please see the MIT license information at the end of this file.
 
@@ -12,15 +13,15 @@
     For more information and more tools, visit:
       https://github.com/jpaver/opengametools
 
-    USAGE (See demo_vox_load.cpp)
+    USAGE (See demo_vox.cpp)
 
     1.  To compile this library, do this in *one* C or C++ file:
         #define OGT_VOX_IMPLEMENTATION
-        #include "ogt_vox_loader.h"
+        #include "ogt_vox.h"
 
     2. load a .vox file into a memory buffer. 
        
-    3. construct a scene:
+    3. construct a scene from the memory buffer:
        ogt_vox_scene* scene = ogt_vox_read_scene(buffer, buffer_size);
 
     4. use the scene members to acquire the information you need. eg.
@@ -65,8 +66,8 @@
     An ogt_vox_layer is used to conceptually group instances. Each instance indexes the
     layer that it belongs to, but the layer itself has its own name and hidden/shown state.
 */
-#ifndef OGT_VOX_LOADER_H__
-#define OGT_VOX_LOADER_H__
+#ifndef OGT_VOX_H__
+#define OGT_VOX_H__
 
 #if _MSC_VER == 1400	
     // VS2005 doesn't have inttypes or stdint so we just define what we need here.
@@ -160,7 +161,7 @@
     // frees a buffer returned by ogt_vox_write_scene
     void     ogt_vox_free(void* mem);
 
-#endif // OGT_VOX_LOADER_H__
+#endif // OGT_VOX_H__
 
 //-----------------------------------------------------------------------------------------------------------------
 //
@@ -1289,7 +1290,7 @@
         _vox_file_write_dict_key_value(fp, "_t", t_string);
     }
 
-    // saves the scene out to a buffer that can be loaded with magicavoxel.
+    // saves the scene out to a buffer that when saved as a .vox file can be loaded with magicavoxel.
     uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t& buffer_size) {
         _vox_file_writeable file;
         _vox_file_writeable_init(&file);
@@ -1386,7 +1387,7 @@
                 _vox_file_write_uint32(fp, first_instance_transform_node_id + i);
         }
 
-        // write out an nSHP chunk for all models
+        // write out an nSHP chunk for each of the models
         for (uint32_t i = 0; i < scene->num_models; i++) {
             // compute the size of the nSHP chunk
             uint32_t chunk_size_nshp =
@@ -1406,7 +1407,7 @@
             _vox_file_write_uint32(fp, i);                          // model_id
             _vox_file_write_uint32(fp, 0);                          // num keyvalue pairs in model dictionary
         }
-        // write out an nTRN chunk for all instances - and make them point to an nSHP chunk
+        // write out an nTRN chunk for all instances - and make them point to the relevant nSHP chunk
         for (uint32_t i = 0; i < scene->num_instances; i++) {
             const ogt_vox_instance* instance = &scene->instances[i];
             uint32_t node_id       = first_instance_transform_node_id + i;

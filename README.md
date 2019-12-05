@@ -2,14 +2,15 @@
 
 Open game tools is a set of unencumbered, free, lightweight, easy-to-integrate tools for use in game development. 
 
-So far it only contains the a MagicaVoxel scene loader called ogt_vox_loader, but there is more to come when I have some cycles.
+So far it only contains the a MagicaVoxel scene reader and writer [ogt_vox.h](https://github.com/jpaver/opengametools/blob/master/src/ogt_vox.h), but there will be more to come when I have some cycles.
 
 Please consider contributing. See [CONTRIBUTING.md](https://github.com/jpaver/opengametools/blob/master/CONTRIBUTING.md) for more details.
 
-## MagicaVoxel scene loader
+## MagicaVoxel scene reader and writer.
 
-A C++ loader for [MagicaVoxel](https://ephtracy.github.io/)'s vox file format that allows you to deep access scene information within a .vox file.
+A C++ reader and writer for [MagicaVoxel](https://ephtracy.github.io/)'s vox file format 
 
+Reading from .vox allows you to deep access scene information and:
 - enumerate all or a subset of instance placements within a vox file.
 - get the transforms for those instances as a matrix flattened relative to the scene file.
 - access the voxel grid data for the models referenced by those placements.
@@ -20,15 +21,31 @@ scene format. This will allow your artists to use MagicaVoxel as a level editor,
 a tool for managing a kit, palette of module-set to be used within levels or objects within 
 your own editor. 
 
+The C++ writer for [MagicaVoxel](https://ephtracy.github.io/)'s vox file format produces .vox 
+files that are loadable in MagicaVoxel. The idea is to eventually allow manipulation of .vox 
+files from other tools eg. scene exporter, procedural generator -> decoration workflows, 
+merging and splitting .vox files procedurally. etc.
+
+More work is incoming on the construction and merge API for the scene, right now the editability
+of the scene is pretty bare-bones and dangerous.
+
+I've tested loading multi-instance, multi-model scenes with transforms, layers, names using the 
+scene reader, then written them out using the scene writer and verified they load within 
+MagicaVoxel 0.99.3-alpha. The files are usually smaller than the source .vox and they will
+not preserve all the chunks within the original .vox file so are not binary identical.
+
+If you have example scenes that fail to load or save correctly, I'd be happy to discretely 
+investigate and make fixes.
+
 ## Usage
 
-See [demo/load_vox.cpp](https://github.com/jpaver/opengametools/blob/master/demo/load_vox.cpp) for a simple example.
+See [demo_vox.cpp](https://github.com/jpaver/opengametools/blob/master/demo/demo_vox.cpp) for a simple example.
 
-1. Include ogt_vox_loader.h directly from one of your C or CPP files:
+1. Include ogt_vox.h directly from one of your C or CPP files:
 
    ```c++
         #define OGT_VOX_IMPLEMENTATION
-        #include "ogt_vox_loader.h"
+        #include "ogt_vox.h"
    ```
    
 2. Use your own file utilities to load a .vox file into a memory buffer. eg.
@@ -41,10 +58,10 @@ See [demo/load_vox.cpp](https://github.com/jpaver/opengametools/blob/master/demo
     fclose(fp);
    ```
 	
-3. Pass the buffer into ogt_vox_create_scene to get a scene object eg.
+3. Pass the buffer into ogt_vox_read_scene to get a scene object eg.
 
    ```c++
-    const ogt_vox_scene* scene = ogt_vox_create_scene(buffer, buffer_size);
+    const ogt_vox_scene* scene = ogt_vox_read_scene(buffer, buffer_size);
     // the buffer can be safely deleted once the scene is instantiated.
     delete[] buffer;
    ```
@@ -64,7 +81,7 @@ See [demo/load_vox.cpp](https://github.com/jpaver/opengametools/blob/master/demo
    ```
 ## Note 
 
-This currently supports most relevant chunks as described here:
+Both reader and writer currently support most relevant chunks as described here:
 - [MagicaVoxel-file-format-vox.txt](https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox.txt)
 - [MagicaVoxel-file-format-vox-extension.txt](https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox-extension.txt)
 

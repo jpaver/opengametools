@@ -29,13 +29,13 @@ The underlying philosophy of the code in this library is to make integration eas
   
 ```c++
 #define OGT_VOX_IMPLEMENTATION
-#include "opengametools/src/ogt_vox_loader.h"
+#include "opengametools/src/ogt_vox.h"
 ```
 
   ...then #include the header/interface where ever you need to use it.
   
 ```c++
-#include "opengametools/src/ogt_vox_loader.h"
+#include "opengametools/src/ogt_vox.h"
 ```
 
 2. No third party library dependencies in this project:
@@ -61,7 +61,7 @@ The underlying philosophy of the code in this library is to make integration eas
 
 ## Documentation
 
-Documentation for each tool lives in the source code header eg. `src\ogt_vox_loader.h` with example code in the `demos` folder.
+Documentation for each tool lives in the source code header eg. `src\ogt_vox.h` with example code in the `demos` folder. eg `demo\demo_vox.cpp`.
 
 You are welcome to make changes to documentation and use issues/pull requests to do so.
 
