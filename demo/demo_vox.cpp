@@ -10,13 +10,18 @@
 
 #define OGT_VOX_IMPLEMENTATION
 #include "..\src\ogt_vox.h"
-#include <io.h>
 
+
+#if defined(_MSC_VER)
+    #include <io.h>
+#else
+    #include <stdio.h>
+#endif
 
 // a helper function to load a magica voxel scene given a filename.
 const ogt_vox_scene* load_vox_scene(const char* pcFilename)
 {
-	// open the file
+    // open the file
 #if defined(_MSC_VER) && _MSC_VER >= 1400
     FILE * fp;
     if (0 != fopen_s(&fp, pcFilename, "rb"))
@@ -27,9 +32,13 @@ const ogt_vox_scene* load_vox_scene(const char* pcFilename)
     if (!fp)
         return NULL;
 
-	// load the file into a memory buffer
-    uint32_t buffersize = _filelength(_fileno(fp));
-    uint8_t* buffer = new uint8_t[buffersize];
+    // get the buffer size which matches the size of the file
+    fseek(fp, 0, SEEK_END);
+    uint32_t buffersize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    // load the file into a memory buffer
+    uint8_t * buffer = new uint8_t[buffersize];
     fread(buffer, buffersize, 1, fp);
     fclose(fp);
 

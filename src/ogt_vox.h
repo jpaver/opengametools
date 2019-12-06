@@ -75,8 +75,15 @@
     typedef signed int    int32_t;
     typedef unsigned int  uint32_t;
     #define UINT32_MAX	0xFFFFFFFF
-#else
+#elif defined(_MSC_VER)
+    // general VS* 
     #include <inttypes.h>
+#elif defined(__GNUC__)
+    // any GCC*
+    #include <inttypes.h>
+    #include <stdlib.h> // for size_t
+#else
+    #error some fixup needed for this platform?
 #endif
 
     // color
@@ -244,11 +251,12 @@
         #define _vox_strlen(a)               strlen(a)
         #define _vox_sprintf(str,str_max,fmt,...)    sprintf_s(str, str_max, fmt, __VA_ARGS__)
     #else
-        #define _vox_str_scanf(str,...)      scanf_s(str,__VA_ARGS__)
+        #define _vox_str_scanf(str,...)      scanf(str,__VA_ARGS__)
         #define _vox_strcpy_static(dst,src)  strcpy(dst,src)
         #define _vox_strcasecmp(a,b)         strcasecmp(a,b)
         #define _vox_strcmp(a,b)             strcmp(a,b)
         #define _vox_strlen(a)               strlen(a)
+        #define _vox_sprintf(str,str_max,fmt,...)    snprintf(str, str_max, fmt, __VA_ARGS__)        
     #endif
 
     // 3d vector utilities
@@ -509,7 +517,7 @@
                 vec3_make(0.0f, 0.0f, 0.0f)    // invalid!
             };
 
-            static const uint32_t k_row2_index[] = { ~0ul, ~0ul, ~0ul, 2, ~0ul, 1, 0, ~0ul};
+            static const uint32_t k_row2_index[] = { UINT32_MAX, UINT32_MAX, UINT32_MAX, 2, UINT32_MAX, 1, 0, UINT32_MAX };
 
             // compute the per-row indexes into k_vectors[] array.
             // unpack rotation bits. 
@@ -827,9 +835,9 @@
                     ogt_vox_transform frame_transform;
                     {
                         _vox_file_read_dict(&dict, fp);
-                        const char* pcRotationValue    = _vox_dict_get_value_as_string(&dict, "_r");
-                        const char* pcTranslationValue = _vox_dict_get_value_as_string(&dict, "_t");
-                        frame_transform = _vox_make_transform_from_dict_strings(pcRotationValue, pcTranslationValue);
+                        const char* rotation_value    = _vox_dict_get_value_as_string(&dict, "_r");
+                        const char* translation_value = _vox_dict_get_value_as_string(&dict, "_t");
+                        frame_transform = _vox_make_transform_from_dict_strings(rotation_value, translation_value);
                     }
                     // setup the transform node.
                     {
@@ -957,7 +965,7 @@
         else if (model_ptrs.size() == 1) {
             // add a single instance
             ogt_vox_instance new_instance;
-            new_instance.model_index  = 0;
+            new_instance.model_index = 0;
             new_instance.transform   = _vox_transform_identity();
             new_instance.layer_index = 0;
             new_instance.name        = 0;
