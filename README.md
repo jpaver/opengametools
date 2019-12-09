@@ -10,7 +10,7 @@ Please consider contributing. See [CONTRIBUTING.md](https://github.com/jpaver/op
 
 A C++ reader, writer and scene merger for [MagicaVoxel](https://ephtracy.github.io/)'s vox file format 
 
-### Scene reading
+### Scene reading (.vox) 
 Reading from .vox allows you to deep access scene information and:
 - enumerate all or a subset of instance placements within a vox file.
 - get the transforms for those instances as a matrix flattened relative to the scene file.
@@ -22,7 +22,7 @@ scene format. This will allow your artists to use MagicaVoxel as a level editor,
 a tool for managing a kit, palette of module-set to be used within levels or objects within 
 your own editor. 
 
-### Scene Writing
+### Scene Writing (.vox)
 The C++ writer for [MagicaVoxel](https://ephtracy.github.io/)'s vox file format produces .vox 
 files that are loadable in MagicaVoxel. The idea is to eventually allow manipulation of .vox 
 files from other tools eg. scene exporter, procedural generator -> decoration workflows, 
@@ -39,7 +39,7 @@ not preserve all the chunks within the original .vox file, so are not binary ide
 If you have example scenes that fail to load or save correctly, I'd be happy to discretely 
 investigate and make fixes.
 
-### Scene Merging
+### Scene Merging (.vox)
 
 The Scene merge code allows you to take multiple separate .vox files and put them all into a single vox file 
 while doing some magic to try preserve the original colors in the output file.
