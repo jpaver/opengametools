@@ -99,9 +99,9 @@ uint32_t count_solid_voxels_in_model(const ogt_vox_model* model)
     return solid_voxel_count;
 }
 
-int main(int argc, char** argv)
+void demo_load_and_save()
 {
-    const ogt_vox_scene* scene = load_vox_scene("test_tileset.vox");
+    const ogt_vox_scene* scene = load_vox_scene("vox/test_multiple_model_scene.vox");
     if (scene)
     {
         printf("#layers: %u\n", scene->num_layers);
@@ -151,13 +151,57 @@ int main(int argc, char** argv)
                 model->voxel_hash);
         }
 
-        save_vox_scene("test_tileset_SAVED.vox", scene); 
+        save_vox_scene("saved.vox", scene); 
 
         ogt_vox_destroy_scene(scene);
     }
-    return 0;
 }
 
+// demonstrates merging multiple scenes together
+void demo_merge_scenes()
+{
+    const ogt_vox_scene* scenes[] = {
+        load_vox_scene("vox/chr_old.vox"),
+        load_vox_scene("vox/chr_rain.vox"),
+        load_vox_scene("vox/chr_sword.vox"),
+        load_vox_scene("vox/chr_knight.vox"),
+        load_vox_scene("vox/doom.vox"),
+    };
+    const uint32_t k_scene_count = sizeof(scenes) / sizeof(scenes[0]);
+
+    bool use_explicit_output_palette = false;
+
+    // construct the merged scenes from the above loaded scenes.
+    ogt_vox_scene* merged_scene = NULL;
+    if (use_explicit_output_palette) {
+        // this scene controls the explicit output palette of the merged scenes.
+        const ogt_vox_scene* palette_scene = load_vox_scene("merge_src/test_palette_remap.vox");
+        merged_scene = ogt_vox_merge_scenes(scenes, k_scene_count, &palette_scene->palette.color[1], 255);
+        ogt_vox_destroy_scene(palette_scene);
+    }
+    else {
+        // instead of using an explicit palette, merge scenes will combine all source scene palettes as best as it can.
+        // This works best if there is a fair amount of overlap in each of the scenes colors, and/or if all scenes
+        // only use a small subset of the colors in their own palette.
+        merged_scene = ogt_vox_merge_scenes(scenes, k_scene_count, NULL, 0);
+    }
+
+    // save the merged scene to disk, and destroy it.
+    save_vox_scene("merged.vox", merged_scene);
+    ogt_vox_destroy_scene(merged_scene);
+
+    // destroy our source scenes
+    for (uint32_t scene_index = 0; scene_index < k_scene_count; scene_index++) {
+        if (scenes[scene_index])
+            ogt_vox_destroy_scene(scenes[scene_index]);
+    }
+}
+
+int main(int argc, char** argv)
+{
+    demo_load_and_save();
+    demo_merge_scenes();
+}
 
 /* -------------------------------------------------------------------------------------------------------------------------------------------------
 

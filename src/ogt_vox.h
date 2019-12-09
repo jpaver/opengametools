@@ -13,21 +13,50 @@
     For more information and more tools, visit:
       https://github.com/jpaver/opengametools
 
-    USAGE (See demo_vox.cpp)
+    HOW TO COMPILE THIS LIBRARY
 
     1.  To compile this library, do this in *one* C or C++ file:
         #define OGT_VOX_IMPLEMENTATION
         #include "ogt_vox.h"
 
-    2. load a .vox file into a memory buffer. 
+    2. From any other module, it is sufficient to just #include this as usual:
+        #include "ogt_vox.h"
+
+    HOW TO READ A VOX SCENE (See demo_vox.cpp)
+
+    1. load a .vox file off disk into a memory buffer. 
        
-    3. construct a scene from the memory buffer:
+    2. construct a scene from the memory buffer:
        ogt_vox_scene* scene = ogt_vox_read_scene(buffer, buffer_size);
 
-    4. use the scene members to acquire the information you need. eg.
+    3. use the scene members to extract the information you need. eg.
        printf("# of layers: %u\n", scene->num_layers );
+    
+    HOW TO MERGE MULTIPLE VOX SCENES (See merge_vox.cpp)
 
-    EXPLANATION
+    1. construct multiple scenes from files you want to merge. 
+
+        // read buffer1/buffer_size1 from "test1.vox"
+        // read buffer2/buffer_size2 from "test2.vox"
+        // read buffer3/buffer_size3 from "test3.vox"
+        ogt_vox_scene* scene1 = ogt_vox_read_scene(buffer1, buffer_size1);
+        ogt_vox_scene* scene2 = ogt_vox_read_scene(buffer2, buffer_size2);
+        ogt_vox_scene* scene3 = ogt_vox_read_scene(buffer3, buffer_size3);
+
+    2. construct a merged scene
+
+        const ogt_vox_scene* scenes[] = {scene1, scene2, scene3}
+        ogt_vox_scene* merged_scene = ogt_vox_merge_scenes(scenes, 3, NULL, 0);
+
+    3. save out the merged scene
+
+        out_buffer = ogt_vox_write_scene(merged_scene, &out_buffer_size);
+
+    4. destry the merged scene - DO NOT use ogt_vox_destroy_scene.
+
+        ogt_vox_destroy_merged_scene(merged_scene);
+
+    EXPLANATION OF SCENE ELEMENTS:
 
     A ogt_vox_scene comprises primarily a set of instances, models, layers and a palette.
 
@@ -65,6 +94,24 @@
 
     An ogt_vox_layer is used to conceptually group instances. Each instance indexes the
     layer that it belongs to, but the layer itself has its own name and hidden/shown state.
+
+    EXPLANATION OF MERGED SCENES:
+
+    A merged scene contains all the models and all the scene instances from
+    each of the scenes that were passed into it.
+
+    The merged scene will have a combined palette of all the source scene
+    palettes by trying to match existing colors exactly, and falling back
+    to an RGB-distance matched color when all 256 colors in the merged
+    scene palette has been allocated.
+
+    You can control 255 merge palette colors by providing those colors to
+    ogt_vox_merge_scenes in the required_colors parameters eg.
+
+        const ogt_vox_palette palette;  // load this via .vox or procedurally or whatever
+        const ogt_vox_scene* scenes[] = {scene1, scene2, scene3};
+        // palette.color[0] is always the empty color which is why we pass 255 colors starting from index 1 only:
+        ogt_vox_scene* merged_scene = ogt_vox_merge_scenes(scenes, 3, &palette.color[1], 255);
 */
 #ifndef OGT_VOX_H__
 #define OGT_VOX_H__
@@ -153,7 +200,9 @@
     typedef void  (*ogt_vox_free_func)(void* ptr);
 
     // override the default scene memory allocator if you need to control memory precisely.
-    void ogt_vox_set_memory_allocator(ogt_vox_alloc_func alloc_func, ogt_vox_free_func free_func);
+    void  ogt_vox_set_memory_allocator(ogt_vox_alloc_func alloc_func, ogt_vox_free_func free_func);
+    void* ogt_vox_malloc(size_t size);
+    void  ogt_vox_free(void* mem);
 
     // creates a scene from a vox file within a memory buffer of a given size.
     // you can destroy the input buffer once you have the scene as this function will allocate separate memory for the scene objecvt.
@@ -165,8 +214,9 @@
     // writes the scene to a new buffer and returns the buffer size. free the buffer with ogt_vox_free
     uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t& buffer_size);
 
-    // frees a buffer returned by ogt_vox_write_scene
-    void     ogt_vox_free(void* mem);
+    // merges the specified scenes together to create a bigger scene. Merged scene can be destroyed using ogt_vox_destroy_scene
+    // If you require specific colors in the merged scene palette, provide up to and including 255 of them via required_colors/required_color_count.
+    ogt_vox_scene* ogt_vox_merge_scenes(const ogt_vox_scene** scenes, uint32_t scene_count, const ogt_vox_rgba* required_colors, const uint32_t required_color_count);
 
 #endif // OGT_VOX_H__
 
@@ -1114,7 +1164,8 @@
             // copy model pointers over to the scene,
             size_t num_scene_models = model_ptrs.size();
             ogt_vox_model** scene_models = (ogt_vox_model * *)_vox_malloc(sizeof(ogt_vox_model*) * num_scene_models);
-            memcpy(scene_models, &model_ptrs[0], sizeof(ogt_vox_model*) * num_scene_models);
+            if (num_scene_models)
+                memcpy(scene_models, &model_ptrs[0], sizeof(ogt_vox_model*) * num_scene_models);
             scene->models     = (const ogt_vox_model **)scene_models;
             scene->num_models = (uint32_t)num_scene_models;
 
@@ -1476,11 +1527,263 @@
         return buffer_data;
     }
     
-    void ogt_vox_free(void* mem)
-    {
+    void* ogt_vox_malloc(size_t size) {
+        return _vox_malloc(size);
+    }
+
+    void ogt_vox_free(void* mem) {
         _vox_free(mem);
     }
-#endif // #ifdef OGT_VOX_IMPLEMENTATION
+
+    // compute the minimum and maximum x coordinate within the scene.
+    static void compute_scene_bounding_box_x(const ogt_vox_scene * scene, int32_t & out_min_x, int32_t & out_max_x) {
+        if (scene->num_instances && scene->num_models)
+        {
+            // We don't apply orientation to the model dimensions and compute the exact min/max. 
+            // Instead we just conservatively use the maximum dimension of the model.
+            int32_t scene_min_x = 0x7ffffff;
+            int32_t scene_max_x = -0x7ffffff;
+            for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++) {
+                const ogt_vox_instance* instance = &scene->instances[instance_index];
+                const ogt_vox_model* model = scene->models[instance->model_index];
+                int32_t max_dim = (int32_t)_vox_max(model->size_x, _vox_max(model->size_y, model->size_z));
+                int32_t half_dim = max_dim / 2;
+                scene_min_x = _vox_min(scene_min_x, ((int32_t)instance->transform.m30) - half_dim);
+                scene_max_x = _vox_max(scene_max_x, ((int32_t)instance->transform.m30) + half_dim);
+            }
+            // pass out the dimensions.
+            out_min_x = scene_min_x;
+            out_max_x = scene_max_x;
+        }
+        else {
+            out_min_x = 0;
+            out_max_x = 0;
+        }
+    }
+
+    // returns a mask of which color indices are used by the specified scene. 
+    // used_mask[0] can be false at the end of this if all models 100% fill their voxel grid with solid voxels, so callers
+    // should handle that case properly.
+    static void compute_scene_used_color_index_mask(bool* used_mask, const ogt_vox_scene * scene) {
+        memset(used_mask, 0, 256);
+        for (uint32_t model_index = 0; model_index < scene->num_models; model_index++) {
+            const ogt_vox_model* model = scene->models[model_index];
+            uint32_t voxel_count = model->size_x * model->size_y * model->size_z;
+            for (uint32_t voxel_index = 0; voxel_index < voxel_count; voxel_index++) {
+                uint8_t color_index = model->voxel_data[voxel_index];
+                used_mask[color_index] = true;
+            }
+        }
+    }
+
+    // finds an exact color in the specified palette if it exists, and UINT32_MAX otherwise
+    static uint32_t find_exact_color_in_palette(const ogt_vox_rgba * palette, uint32_t palette_count, const ogt_vox_rgba color_to_find) {
+        for (uint32_t color_index = 1; color_index < palette_count; color_index++) {
+            const ogt_vox_rgba color_to_match = palette[color_index];
+            // we only try to match r,g,b components exactly.
+            if (color_to_match.r == color_to_find.r && color_to_match.g == color_to_find.g && color_to_match.b == color_to_find.b)
+                return color_index;
+        }
+        // no exact color found
+        return UINT32_MAX;
+    }
+
+    // finds the index within the specified palette that is closest to the color we want to find
+    static uint32_t find_closest_color_in_palette(const ogt_vox_rgba * palette, uint32_t palette_count, const ogt_vox_rgba color_to_find) {
+        // the lower the score the better, so initialize this to the maximum possible score
+        int32_t  best_score = INT32_MAX;
+        uint32_t best_index = 1;
+        // Here we compute a score based on the pythagorean distance between each color in the palette and the color to find.
+        // The distance is in R,G,B space, and we choose the color with the lowest score.
+        for (uint32_t color_index = 1; color_index < palette_count; color_index++) {
+            int32_t r_diff = (int32_t)color_to_find.r - (int32_t)palette[color_index].r;
+            int32_t g_diff = (int32_t)color_to_find.g - (int32_t)palette[color_index].g;
+            int32_t b_diff = (int32_t)color_to_find.b - (int32_t)palette[color_index].b;
+            // There are 2 aspects of our treatment of color here you may want to experiment with:
+            // 1. differences in R, differences in G, differences in B are weighted the same rather than perceptually. Different weightings may be better for you.
+            // 2. We treat R,G,B as if they are in a perceptually linear within each channel. eg. the differences between 
+            //    a value of 5 and 8 in any channel is perceptually the same as the difference between 233 and 236 in the same channel.
+            int32_t score = (r_diff * r_diff) + (g_diff * g_diff) + (b_diff * b_diff);
+            if (score < best_score) {
+                best_score = score;
+                best_index = color_index;
+            }
+        }
+        assert(best_score < UINT32_MAX); // this might indicate a completely degenerate palette.
+        return best_index;
+    }
+
+    static void update_master_palette_from_scene(ogt_vox_rgba * master_palette, uint32_t & master_palette_count, const ogt_vox_scene * scene, uint32_t * scene_to_master_map) {
+        // compute the mask of used colors in the scene.
+        bool scene_used_mask[256];
+        compute_scene_used_color_index_mask(scene_used_mask, scene);
+
+        // initialize the map that converts from scene color_index to master color_index
+        scene_to_master_map[0] = 0;              // zero/empty always maps to zero/empty in the master palette
+        for (uint32_t i = 1; i < 256; i++)
+            scene_to_master_map[i] = UINT32_MAX; // UINT32_MAX means unassigned
+
+        // for each used color in the scene, now allocate it into the master palette.
+        for (uint32_t color_index = 1; color_index < 256; color_index++) {
+            if (scene_used_mask[color_index]) {
+                const ogt_vox_rgba color = scene->palette.color[color_index];
+                // find the exact color in the master palette. Will be UINT32_MAX if the color doesn't already exist
+                uint32_t master_index = find_exact_color_in_palette(master_palette, master_palette_count, color);
+                if (master_index == UINT32_MAX) {
+                    if (master_palette_count < 256) {
+                        // master palette capacity hasn't been exceeded so far, allocate the color to it.
+                        master_palette[master_palette_count] = color;
+                        master_index = master_palette_count++;
+                    }
+                    else {
+                        // otherwise, find the color that is perceptually closest to the original color.
+
+                        // TODO(jpaver): It is potentially problematic if we hit this path for a many-scene merge.
+                        // Earlier scenes will reserve their colors exactly into the master palette, whereas later
+                        // scenes will end up having some of their colors remapped to different colors.
+
+                        // A more holistic approach to color allocation may be necessary here eg.
+                        // we might allow the master palette to grow to more than 256 entries, and then use 
+                        // similarity/frequency metrics to reduce the palette from that down to 256 entries. This 
+                        // will mean all scenes will have be equally important if they have a high-frequency
+                        // usage of a color.
+                        master_index = find_closest_color_in_palette(master_palette, master_palette_count, color);
+                    }
+                }
+                // caller needs to know how to map its original color index into the master palette
+                scene_to_master_map[color_index] = master_index;
+            }
+        }
+    }
+
+    ogt_vox_scene* ogt_vox_merge_scenes(const ogt_vox_scene** scenes, uint32_t scene_count, const ogt_vox_rgba* required_colors, const uint32_t required_color_count) {
+        assert(required_color_count <= 255);    // can't exceed the maximum colors in the master palette plus the empty slot.
+
+        // initialize the master palette. If required colors are specified, map them into the master palette now.
+        ogt_vox_rgba  master_palette[256];
+        uint32_t master_palette_count = 1;          // color_index 0 is reserved for empty color!
+        memset(&master_palette, 0, sizeof(master_palette));
+        for (uint32_t required_index = 0; required_index < required_color_count; required_index++)
+            master_palette[master_palette_count++] = required_colors[required_index];
+
+        // count the number of required models, instances in the master scene
+        uint32_t max_layers = 1;  // we don't actually merge layers. Every instance will be in layer 0.
+        uint32_t max_models = 0;
+        uint32_t max_instances = 0;
+        for (uint32_t scene_index = 0; scene_index < scene_count; scene_index++) {
+            if (!scenes[scene_index])
+                continue;
+            max_instances += scenes[scene_index]->num_instances;
+            max_models += scenes[scene_index]->num_models;
+        }
+
+        // allocate the master instances array
+        ogt_vox_instance* instances = (ogt_vox_instance*)_vox_malloc(sizeof(ogt_vox_instance) * max_instances);
+        ogt_vox_model** models      = (ogt_vox_model**)_vox_malloc(sizeof(ogt_vox_model*) * max_models);
+        ogt_vox_layer* layers       = (ogt_vox_layer*)_vox_malloc(sizeof(ogt_vox_layer) * max_layers);
+        uint32_t num_instances = 0;
+        uint32_t num_models    = 0;
+        uint32_t num_layers    = 0;
+
+        // add a single layer.
+        layers[num_layers].hidden = false;
+        layers[num_layers].name = "merged";
+        num_layers++;
+
+        // go ahead and do the merge now!
+        size_t string_data_size = 0;
+        int32_t offset_x = 0;
+        for (uint32_t scene_index = 0; scene_index < scene_count; scene_index++) {
+            const ogt_vox_scene* scene = scenes[scene_index];
+            if (!scene)
+                continue;
+
+            // update the master palette, and get the map of this scene's color indices into the master palette. 
+            uint32_t scene_color_index_to_master_map[256];
+            update_master_palette_from_scene(master_palette, master_palette_count, scene, scene_color_index_to_master_map);
+
+            // cache away the base model index for this scene.
+            uint32_t base_model_index = num_models;
+
+            // create copies of all models that have color indices remapped.
+            for (uint32_t model_index = 0; model_index < scene->num_models; model_index++) {
+                const ogt_vox_model* model = scene->models[model_index];
+                uint32_t voxel_count = model->size_x * model->size_y * model->size_z;
+                // clone the model
+                ogt_vox_model* override_model = (ogt_vox_model*)_vox_malloc(sizeof(ogt_vox_model) + voxel_count);
+                uint8_t * override_voxel_data = (uint8_t*)& override_model[1];
+
+                // remap all color indices in the cloned model so they reference the master palette now!
+                for (uint32_t voxel_index = 0; voxel_index < voxel_count; voxel_index++) {
+                    uint8_t  old_color_index = model->voxel_data[voxel_index];
+                    uint32_t new_color_index = scene_color_index_to_master_map[old_color_index];
+                    assert(new_color_index < 256);
+                    override_voxel_data[voxel_index] = (uint8_t)new_color_index;
+                }
+                // assign the new model.
+                *override_model = *model;
+                override_model->voxel_data = override_voxel_data;
+                override_model->voxel_hash = _vox_hash(override_voxel_data, voxel_count);
+
+                models[num_models++] = override_model;
+            }
+
+            // compute the scene bounding box on x dimension. this is used to offset instances 
+            // in the merged model along X dimension such that they do not overlap with instances 
+            // from another scene in the merged model.
+            int32_t scene_min_x, scene_max_x;
+            compute_scene_bounding_box_x(scene, scene_min_x, scene_max_x);
+
+            // create copies of all instances (and bias them such that minimum on x starts at zero)
+            for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++) {
+                ogt_vox_instance* dst_instance = &instances[num_instances++];
+                *dst_instance = scene->instances[instance_index];
+                dst_instance->layer_index = 0;
+                dst_instance->model_index += base_model_index;
+                dst_instance->transform.m30 += (float)(offset_x - scene_min_x);
+                if (dst_instance->name)
+                    string_data_size += _vox_strlen(dst_instance->name) + 1; // + 1 for zero terminator
+            }
+
+            offset_x += (scene_max_x - scene_min_x); // step the width of the scene in x dimension
+            offset_x += 4;                           // a margin of this many voxels between scenes
+        }
+
+        // fill any unused master palette entries with purple/invalid color.
+        const ogt_vox_rgba k_invalid_color = { 255, 0, 255, 255 };  // purple = invalid
+        for (uint32_t color_index = master_palette_count; color_index < 256; color_index++)
+            master_palette[color_index] = k_invalid_color;
+
+        // assign the master scene on output. string_data is part of the scene allocation.
+        size_t scene_size = sizeof(ogt_vox_scene) + string_data_size;
+        ogt_vox_scene * merged_scene = (ogt_vox_scene*)_vox_calloc(scene_size);
+
+        // copy name data into the string section and make instances point to it. This makes the merged model self-contained.
+        char* scene_string_data = (char*)&merged_scene[1];
+        for (uint32_t instance_index = 0; instance_index < num_instances; instance_index++) {
+            if (instances[instance_index].name) {
+                size_t string_len = _vox_strlen(instances[instance_index].name) + 1; // +1 for zero terminator
+                memcpy(scene_string_data, instances[instance_index].name, string_len);
+                instances[instance_index].name = scene_string_data;
+                scene_string_data += string_len;
+            }
+        }
+
+        memset(merged_scene, 0, sizeof(ogt_vox_scene));
+        merged_scene->instances     = instances;
+        merged_scene->num_instances = max_instances;
+        merged_scene->models        = (const ogt_vox_model * *)models;
+        merged_scene->num_models    = max_models;
+        merged_scene->layers        = layers;
+        merged_scene->num_layers    = max_layers;
+        // copy color palette into the merged scene
+        for (uint32_t color_index = 0; color_index < 256; color_index++)
+            merged_scene->palette.color[color_index] = master_palette[color_index];
+
+        return merged_scene;
+    }
+
+ #endif // #ifdef OGT_VOX_IMPLEMENTATION
 
 /* -------------------------------------------------------------------------------------------------------------------------------------------------
 
