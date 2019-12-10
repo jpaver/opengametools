@@ -1541,15 +1541,17 @@
         {
             // We don't apply orientation to the model dimensions and compute the exact min/max. 
             // Instead we just conservatively use the maximum dimension of the model.
-            int32_t scene_min_x = 0x7ffffff;
+            int32_t scene_min_x =  0x7ffffff;
             int32_t scene_max_x = -0x7ffffff;
             for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++) {
                 const ogt_vox_instance* instance = &scene->instances[instance_index];
                 const ogt_vox_model* model = scene->models[instance->model_index];
                 int32_t max_dim = (int32_t)_vox_max(model->size_x, _vox_max(model->size_y, model->size_z));
                 int32_t half_dim = max_dim / 2;
-                scene_min_x = _vox_min(scene_min_x, ((int32_t)instance->transform.m30) - half_dim);
-                scene_max_x = _vox_max(scene_max_x, ((int32_t)instance->transform.m30) + half_dim);
+                int32_t min_x = (int32_t)instance->transform.m30 - half_dim;
+                int32_t max_x = (int32_t)instance->transform.m30 + half_dim;
+                scene_min_x = min_x < scene_min_x ? min_x : scene_min_x;
+                scene_max_x = max_x > scene_max_x ? max_x : scene_max_x;
             }
             // pass out the dimensions.
             out_min_x = scene_min_x;
