@@ -31,6 +31,9 @@
 
     3. use the scene members to extract the information you need. eg.
        printf("# of layers: %u\n", scene->num_layers );
+
+    4. destroy the scene:
+       ogt_vox_destroy_scene(scene);
     
     HOW TO MERGE MULTIPLE VOX SCENES (See merge_vox.cpp)
 
@@ -45,16 +48,17 @@
 
     2. construct a merged scene
 
-        const ogt_vox_scene* scenes[] = {scene1, scene2, scene3}
+        const ogt_vox_scene* scenes[] = {scene1, scene2, scene3};
         ogt_vox_scene* merged_scene = ogt_vox_merge_scenes(scenes, 3, NULL, 0);
 
     3. save out the merged scene
 
-        out_buffer = ogt_vox_write_scene(merged_scene, &out_buffer_size);
+        uint8_t* out_buffer = ogt_vox_write_scene(merged_scene, &out_buffer_size);
+        // save out_buffer to disk as a .vox file (it has length out_buffer_size)
 
-    4. destry the merged scene - DO NOT use ogt_vox_destroy_scene.
+    4. destroy the merged scene:
 
-        ogt_vox_destroy_merged_scene(merged_scene);
+        ogt_vox_destroy_scene(merged_scene);
 
     EXPLANATION OF SCENE ELEMENTS:
 
@@ -105,8 +109,8 @@
     to an RGB-distance matched color when all 256 colors in the merged
     scene palette has been allocated.
 
-    You can control 255 merge palette colors by providing those colors to
-    ogt_vox_merge_scenes in the required_colors parameters eg.
+    You can explicitly control up to 255 merge palette colors by providing 
+    those colors to ogt_vox_merge_scenes in the required_colors parameters eg.
 
         const ogt_vox_palette palette;  // load this via .vox or procedurally or whatever
         const ogt_vox_scene* scenes[] = {scene1, scene2, scene3};
