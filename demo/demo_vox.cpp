@@ -1,8 +1,8 @@
 /*
     demo_vox - MIT license - Justin Paver, Oct 2019
 
-    A demonstration program to show you how to use the MagicaVoxel scene reader and
-    writer from the open game tools project: https://github.com/jpaver/opengametools.
+    A demonstration program to show you how to use the MagicaVoxel scene reader,
+    writer, and merger from the open game tools project: https://github.com/jpaver/opengametools.
 
     Please see the MIT license information at the end of this file, and please consider 
     sharing any improvements you make.
@@ -11,23 +11,21 @@
 #define OGT_VOX_IMPLEMENTATION
 #include "..\src\ogt_vox.h"
 
-
 #if defined(_MSC_VER)
     #include <io.h>
-#else
-    #include <stdio.h>
 #endif
+#include <stdio.h>
 
 // a helper function to load a magica voxel scene given a filename.
-const ogt_vox_scene* load_vox_scene(const char* pcFilename)
+const ogt_vox_scene* load_vox_scene(const char* filename, uint32_t scene_read_flags = 0)
 {
     // open the file
 #if defined(_MSC_VER) && _MSC_VER >= 1400
     FILE * fp;
-    if (0 != fopen_s(&fp, pcFilename, "rb"))
+    if (0 != fopen_s(&fp, filename, "rb"))
         fp = 0;
 #else
-    FILE * fp = fopen(pcFilename, "rb");
+    FILE * fp = fopen(filename, "rb");
 #endif
     if (!fp)
         return NULL;
@@ -43,7 +41,7 @@ const ogt_vox_scene* load_vox_scene(const char* pcFilename)
     fclose(fp);
 
     // construct the scene from the buffer
-    const ogt_vox_scene * scene = ogt_vox_read_scene(buffer, buffersize);
+    const ogt_vox_scene * scene = ogt_vox_read_scene(buffer, buffersize, scene_read_flags);
 
     // the buffer can be safely deleted once the scene is instantiated.
     delete[] buffer;
@@ -51,6 +49,10 @@ const ogt_vox_scene* load_vox_scene(const char* pcFilename)
     return scene;
 }
 
+const ogt_vox_scene* load_vox_scene_with_groups(const char* filename)
+{
+    return load_vox_scene(filename, k_read_scene_flags_groups);
+}
 
 // a helper function to save a magica voxel scene to disk.
 void save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene) 
@@ -101,7 +103,7 @@ uint32_t count_solid_voxels_in_model(const ogt_vox_model* model)
 
 void demo_load_and_save()
 {
-    const ogt_vox_scene* scene = load_vox_scene("vox/test_multiple_model_scene.vox");
+    const ogt_vox_scene* scene = load_vox_scene_with_groups("vox/test_groups.vox");
     if (scene)
     {
         printf("#layers: %u\n", scene->num_layers);
@@ -113,6 +115,19 @@ void demo_load_and_save()
                 layer->name ? layer->name : "",
                 layer->hidden ? "hidden" : "shown");
         }
+        printf("#groups: %u\n", scene->num_groups);
+        for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++)
+        {
+            const ogt_vox_group* group = &scene->groups[group_index];
+            const ogt_vox_layer* group_layer = group->layer_index != UINT32_MAX ? &scene->layers[group->layer_index] : NULL;
+            printf("group[%u] has parent group %u, is part of layer[%u,name=%s] and is %s\n", 
+                group_index, 
+                group->parent_group_index,
+                group->layer_index,
+                group_layer && group_layer->name ? group_layer->name : "",
+                group->hidden ? "hidden" : "shown");
+        }
+            
         // iterate over all instances - and print basic information about the instance and the model that it references
         printf("# instances: %u\n", scene->num_instances);
         for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++)
@@ -125,13 +140,14 @@ void demo_load_and_save()
                 scene->layers[instance->layer_index].name ? scene->layers[instance->layer_index].name : 
                 "";
 
-            printf("instance[%u,name=%s] at position (%.0f,%.0f,%.0f) uses model %u and is in layer[%u, name='%s'] and is %s\n",
+            printf("instance[%u,name=%s] at position (%.0f,%.0f,%.0f) uses model %u and is in layer[%u, name='%s'], group %u, and is %s\n",
                 instance_index,
                 instance->name ? instance->name : "",
                 instance->transform.m30, instance->transform.m31, instance->transform.m32, // translation components of the instance
                 instance->model_index,
                 instance->layer_index,
                 layer_name,
+                instance->group_index,
                 instance->hidden ? "hidden" : "shown");
         }
         // iterate over all models and print basic information about the model.
@@ -166,6 +182,7 @@ void demo_merge_scenes()
         load_vox_scene("vox/chr_sword.vox"),
         load_vox_scene("vox/chr_knight.vox"),
         load_vox_scene("vox/doom.vox"),
+        load_vox_scene_with_groups("vox/test_groups.vox"),
     };
     const uint32_t k_scene_count = sizeof(scenes) / sizeof(scenes[0]);
 
