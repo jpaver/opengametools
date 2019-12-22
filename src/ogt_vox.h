@@ -125,7 +125,15 @@
     typedef unsigned char uint8_t;
     typedef signed int    int32_t;
     typedef unsigned int  uint32_t;
-    #define UINT32_MAX	0xFFFFFFFF
+	#ifndef UINT32_MAX
+		#define UINT32_MAX	((uint32_t)0xFFFFFFFF)
+	#endif
+	#ifndef INT32_MAX
+		#define INT32_MAX	((int32_t)0x7FFFFFFF)
+	#endif
+	#ifndef UINT8_MAX
+		#define UINT8_MAX	((uint8_t)0xFF)
+	#endif
 #elif defined(_MSC_VER)
     // general VS* 
     #include <inttypes.h>
