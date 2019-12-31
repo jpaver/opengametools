@@ -1281,6 +1281,11 @@
             _vox_free(const_cast<ogt_vox_layer*>(scene->layers));
             scene->layers = NULL;
         }
+        // free groups array
+        if (scene->groups) {
+            _vox_free(const_cast<ogt_vox_group*>(scene->groups));
+            scene->groups = NULL;
+        }
         // finally, free the scene.
         _vox_free(scene);
     }
