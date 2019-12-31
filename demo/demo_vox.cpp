@@ -32,16 +32,16 @@ const ogt_vox_scene* load_vox_scene(const char* filename, uint32_t scene_read_fl
 
     // get the buffer size which matches the size of the file
     fseek(fp, 0, SEEK_END);
-    uint32_t buffersize = ftell(fp);
+    uint32_t buffer_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
     // load the file into a memory buffer
-    uint8_t * buffer = new uint8_t[buffersize];
-    fread(buffer, buffersize, 1, fp);
+    uint8_t * buffer = new uint8_t[buffer_size];
+    fread(buffer, buffer_size, 1, fp);
     fclose(fp);
 
     // construct the scene from the buffer
-    const ogt_vox_scene * scene = ogt_vox_read_scene(buffer, buffersize, scene_read_flags);
+    const ogt_vox_scene * scene = ogt_vox_read_scene_with_flags(buffer, buffer_size, scene_read_flags);
 
     // the buffer can be safely deleted once the scene is instantiated.
     delete[] buffer;
@@ -59,7 +59,7 @@ void save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene)
 {
     // save the scene back out. 
     uint32_t buffersize = 0;
-    uint8_t* buffer = ogt_vox_write_scene(scene, buffersize);
+    uint8_t* buffer = ogt_vox_write_scene(scene, &buffersize);
     if (!buffer)
         return;
 

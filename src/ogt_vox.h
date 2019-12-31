@@ -137,6 +137,8 @@
 #elif defined(_MSC_VER)
     // general VS* 
     #include <inttypes.h>
+#elif __APPLE__
+    // general Apple compiler
 #elif defined(__GNUC__)
     // any GCC*
     #include <inttypes.h>
@@ -149,38 +151,38 @@
     static const uint32_t k_invalid_group_index = UINT32_MAX;
 
     // color
-    struct ogt_vox_rgba
+    typedef struct ogt_vox_rgba
     {
         uint8_t r,g,b,a;            // red, green, blue and alpha components of a color.
-    };
+    } ogt_vox_rgba;
 
     // column-major 4x4 matrix
-    struct ogt_vox_transform 
+    typedef struct ogt_vox_transform
     {
         float m00, m01, m02, m03;   // column 0 of 4x4 matrix, 1st three elements = x axis vector, last element always 0.0
         float m10, m11, m12, m13;   // column 1 of 4x4 matrix, 1st three elements = y axis vector, last element always 0.0
         float m20, m21, m22, m23;   // column 2 of 4x4 matrix, 1st three elements = z axis vector, last element always 0.0
         float m30, m31, m32, m33;   // column 3 of 4x4 matrix. 1st three elements = translation vector, last element always 1.0
-    };
+    } ogt_vox_transform;
 
     // a palette of colors
-    struct ogt_vox_palette
+    typedef struct ogt_vox_palette
     {
         ogt_vox_rgba color[256];      // palette of colors. use the voxel indices to lookup color from the palette.
-    };
+    } ogt_vox_palette;
 
     // a 3-dimensional model of voxels
-    struct ogt_vox_model
+    typedef struct ogt_vox_model
     {
         uint32_t       size_x;        // number of voxels in the local x dimension
         uint32_t       size_y;        // number of voxels in the local y dimension
         uint32_t       size_z;        // number of voxels in the local z dimension
         uint32_t       voxel_hash;    // hash of the content of the grid.
         const uint8_t* voxel_data;    // grid of voxel data comprising color indices in x -> y -> z order. a color index of 0 means empty, all other indices mean solid and can be used to index the scene's palette to obtain the color for the voxel.
-    };
+    } ogt_vox_model;
 
     // an instance of a model within the scene
-    struct ogt_vox_instance
+    typedef struct ogt_vox_instance
     {
         const char*       name;         // name of the instance if there is one, will be NULL otherwise.
         ogt_vox_transform transform;    // orientation and position of this instance within the scene. This is relative to its group local transform if group_index is not 0
@@ -188,26 +190,26 @@
         uint32_t          layer_index;  // index of the layer used by this instance. used to lookup the layer in the scene's layers[] array.
         uint32_t          group_index;  // this will be the index of the group in the scene's groups[] array. If group is zero it will be the scene root group and the instance transform will be a world-space transform, otherwise the transform is relative to the group.
         bool              hidden;       // whether this instance is individually hidden or not. Note: the instance can also be hidden when its layer is hidden, or if it belongs to a group that is hidden.
-    };
+    } ogt_vox_instance;
 
     // describes a layer within the scene
-    struct ogt_vox_layer
+    typedef struct ogt_vox_layer
     {
         const char* name;               // name of this layer if there is one, will be NULL otherwise.
         bool        hidden;             // whether this layer is hidden or not.
-    };
+    } ogt_vox_layer;
 
     // describes a group within the scene
-    struct ogt_vox_group
+    typedef struct ogt_vox_group
     {
         ogt_vox_transform transform;            // transform of this group relative to its parent group (if any), otherwise this will be relative to world-space.
         uint32_t          parent_group_index;   // if this group is parented to another group, this will be the index of its parent in the scene's groups[] array, otherwise this group will be the scene root group and this value will be k_invalid_group_index
         uint32_t          layer_index;          // which layer this group belongs to. used to lookup the layer in the scene's layers[] array.
         bool              hidden;               // whether this group is hidden or not.
-    };
+    } ogt_vox_group;
 
     // the scene parsed from a .vox file.
-    struct ogt_vox_scene
+    typedef struct ogt_vox_scene
     {
         uint32_t                num_models;     // number of models within the scene.
         uint32_t                num_instances;  // number of instances in the scene
@@ -218,7 +220,7 @@
         const ogt_vox_layer*    layers;         // array of layers. size is num_layers
         const ogt_vox_group*    groups;         // array of groups. size is num_groups
         ogt_vox_palette         palette;        // the palette for this scene
-    };
+    } ogt_vox_scene;
 
     // allocate memory function interface. pass in size, and get a pointer to memory with at least that size available.
     typedef void* (*ogt_vox_alloc_func)(size_t size);
@@ -231,18 +233,21 @@
     void* ogt_vox_malloc(size_t size);
     void  ogt_vox_free(void* mem);
 
-    // flags for ogt_vox_read_scene
+    // flags for ogt_vox_read_scene_with_flags
     static const uint32_t k_read_scene_flags_groups = 1 << 0; // if not specified, all instance transforms will be flattened into world space. If specified, will read group information and keep all transforms as local transform relative to the group they are in.
 
     // creates a scene from a vox file within a memory buffer of a given size.
     // you can destroy the input buffer once you have the scene as this function will allocate separate memory for the scene objecvt.
-    const ogt_vox_scene* ogt_vox_read_scene(const uint8_t* buffer, uint32_t buffer_size, uint32_t read_flags = 0);
+    const ogt_vox_scene* ogt_vox_read_scene(const uint8_t* buffer, uint32_t buffer_size);
+
+    // just like ogt_vox_read_scene, but you can additionally pass a union of k_read_scene_flags
+    const ogt_vox_scene* ogt_vox_read_scene_with_flags(const uint8_t* buffer, uint32_t buffer_size, uint32_t read_flags);
 
     // destroys a scene object to release its memory.
     void ogt_vox_destroy_scene(const ogt_vox_scene* scene);
 
     // writes the scene to a new buffer and returns the buffer size. free the buffer with ogt_vox_free
-    uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t& buffer_size);
+    uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t* buffer_size);
 
     // merges the specified scenes together to create a bigger scene. Merged scene can be destroyed using ogt_vox_destroy_scene
     // If you require specific colors in the merged scene palette, provide up to and including 255 of them via required_colors/required_color_count.
@@ -375,7 +380,7 @@
 
     // hash utilities
     static uint32_t _vox_hash(const uint8_t* data, uint32_t data_size) {
-        unsigned long hash = 0;
+        uint32_t hash = 0;
         for (uint32_t i = 0; i < data_size; i++)
             hash = data[i] + (hash * 65559);
         return hash;
@@ -609,7 +614,7 @@
             uint32_t row0_vec_index = (packed_rotation_bits >> 0) & 3;
             uint32_t row1_vec_index = (packed_rotation_bits >> 2) & 3;
             uint32_t row2_vec_index = k_row2_index[(1 << row0_vec_index) | (1 << row1_vec_index)];    // process of elimination to determine row 2 index based on row0/row1 being one of {0,1,2} choose 2.
-            assert(row2_vec_index != ~0ul);
+            assert(row2_vec_index != UINT32_MAX); // if you hit this, you probably have invalid indices for row0_vec_index/row1_vec_index.
 
             // unpack rotation bits for vector signs
             //  bits  : meaning
@@ -772,12 +777,12 @@
         return memcmp(lhs->voxel_data, rhs->voxel_data, num_voxels_lhs) == 0 ? true : false;
     }
 
-    const ogt_vox_scene* ogt_vox_read_scene(const uint8_t * buffer, uint32_t bufferSize, uint32_t read_flags) {
-        _vox_file file = { buffer, bufferSize, 0 };
+    const ogt_vox_scene* ogt_vox_read_scene_with_flags(const uint8_t * buffer, uint32_t buffer_size, uint32_t read_flags) {
+        _vox_file file = { buffer, buffer_size, 0 };
         _vox_file* fp = &file;
 
         // parsing state/context
-        _vox_array<ogt_vox_model*>    model_ptrs;
+        _vox_array<ogt_vox_model*>   model_ptrs;
         _vox_array<_vox_scene_node_> nodes;
         _vox_array<ogt_vox_instance> instances;
         _vox_array<char>             string_data;
@@ -1060,7 +1065,6 @@
         // we can't do this while parsing chunks unfortunately because some chunks reference chunks
         // that are later in the file than them.
         if (nodes.size()) {
-            ogt_vox_transform transform = _vox_transform_identity();
             bool generate_groups = read_flags & k_read_scene_flags_groups ? true : false;
             // if we're not reading scene-embedded groups, we generate only one and then flatten all instance transforms.
             if (!generate_groups) {
@@ -1261,6 +1265,10 @@
         return scene;
     }
 
+    const ogt_vox_scene* ogt_vox_read_scene(const uint8_t* buffer, uint32_t buffer_size) {
+        return ogt_vox_read_scene_with_flags(buffer, buffer_size, 0);
+    }
+
     void ogt_vox_destroy_scene(const ogt_vox_scene * _scene) {
         ogt_vox_scene* scene = const_cast<ogt_vox_scene*>(_scene);
         // free models from model array
@@ -1318,7 +1326,6 @@
         bool row0_negative = _vox_get_vec3_rotation_bits(row0, row0_index);
         bool row1_negative = _vox_get_vec3_rotation_bits(row1, row1_index);
         bool row2_negative = _vox_get_vec3_rotation_bits(row2, row2_index);
-        const uint32_t row_mask = (1 << row0_index) | (1 << row1_index) | (1 << row2_index);
         assert(((1 << row0_index) | (1 << row1_index) | (1 << row2_index)) == 7); // check that rows are orthogonal. There must be a non-zero entry in column 0, 1 and 2 across these 3 rows.
         return (row0_index) | (row1_index << 2) | (row0_negative ? 1 << 4 : 0) | (row1_negative ? 1 << 5 : 0) | (row2_negative ? 1 << 6 : 0);
     }
@@ -1424,7 +1431,7 @@
     }
 
     // saves the scene out to a buffer that when saved as a .vox file can be loaded with magicavoxel.
-    uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t& buffer_size) {
+    uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t* buffer_size) {
         _vox_file_writeable file;
         _vox_file_writeable_init(&file);
         _vox_file_writeable* fp = &file;
@@ -1432,11 +1439,6 @@
         // write file header and file version
         _vox_file_write_uint32(fp, CHUNK_ID_VOX_);
         _vox_file_write_uint32(fp, 150);
-
-        // read the fields common to all chunks
-        uint32_t chunk_id = 0;
-        uint32_t chunk_size = 0;
-        uint32_t chunk_child_size = 0;
 
         // write the main chunk 
         _vox_file_write_uint32(fp, CHUNK_ID_MAIN);
@@ -1613,7 +1615,7 @@
         }
         
         // we deliberately don't free the fp->data field, just pass the buffer pointer and size out to the caller
-        buffer_size = (uint32_t)fp->data.count;
+        *buffer_size = (uint32_t)fp->data.count;
         uint8_t* buffer_data = _vox_file_get_data(fp);
         // we deliberately clear this pointer so it doesn't get auto-freed on exiting. The caller will own the memory hereafter.
         fp->data.data = NULL;
@@ -1621,7 +1623,7 @@
         // patch up the main chunk's child chunk size now that we've written everything we're going to write.
         {
             uint32_t* main_chunk_child_size = (uint32_t*)& buffer_data[offset_post_main_chunk - sizeof(uint32_t)];
-            *main_chunk_child_size = buffer_size - offset_post_main_chunk;
+            *main_chunk_child_size = *buffer_size - offset_post_main_chunk;
         }
 
         return buffer_data;
