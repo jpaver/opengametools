@@ -337,7 +337,7 @@
         #define _vox_strlen(a)               strlen(a)
         #define _vox_sprintf(str,str_max,fmt,...)    sprintf_s(str, str_max, fmt, __VA_ARGS__)
     #else
-        #define _vox_str_scanf(str,...)      scanf(str,__VA_ARGS__)
+        #define _vox_str_scanf(str,...)      sscanf(str,__VA_ARGS__)
         #define _vox_strcpy_static(dst,src)  strcpy(dst,src)
         #define _vox_strcasecmp(a,b)         strcasecmp(a,b)
         #define _vox_strcmp(a,b)             strcmp(a,b)
