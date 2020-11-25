@@ -694,7 +694,7 @@
                 ogt_vox_transform new_transform = (generate_groups) ? node->u.transform.transform  // don't multiply by the parent transform. caller wants the group-relative transform
                         : _vox_transform_multiply(node->u.transform.transform, transform);         // flatten the transform if we're not generating groups: child transform * parent transform
                 const char* new_transform_name = node->u.transform.name[0] ? node->u.transform.name : NULL;
-                transform_last_name = transform_last_name ? transform_last_name : new_transform_name;    // if there was already a transform name, keep that otherwise keep the new transform name
+                transform_last_name = new_transform_name ? new_transform_name : transform_last_name;    // if this node has a name, use it instead of our parent name
                 generate_instances_for_node(nodes, node->u.transform.child_node_id, child_id_array, node->u.transform.layer_id, new_transform, model_ptrs, transform_last_name, node->u.transform.hidden, instances, string_data, groups, group_index, generate_groups);
                 break;
             }
