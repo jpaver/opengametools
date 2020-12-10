@@ -95,7 +95,9 @@ Though rOBJ/MATT/MATL chunks are not supported for now. If there is interest, I 
 
 ## Projects using open game tools
 
- I am using it in my own project. Details to be revealed soon!
+ - https://github.com/Phyronnaz/VoxelPlugin
+ - https://voxelmax.com/
+ - I am also using it in my own game project. Will share details when I'm ready to decloak.
 
 ## Acknowledgements
 
