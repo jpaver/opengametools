@@ -1081,6 +1081,7 @@
             // add a single instance
             ogt_vox_instance new_instance;
             new_instance.model_index = 0;
+            new_instance.group_index = 0;			
             new_instance.transform   = _vox_transform_identity();
             new_instance.layer_index = 0;
             new_instance.name        = 0;
