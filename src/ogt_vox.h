@@ -388,7 +388,7 @@
 
     // memory allocation utils.
     static void* _ogt_priv_alloc_default(size_t size) { return malloc(size); }
-    static void  _ogt_priv_free_default(void* pPtr)    { free(pPtr); }
+    static void  _ogt_priv_free_default(void* ptr)    { free(ptr); }
     static ogt_vox_alloc_func g_alloc_func = _ogt_priv_alloc_default; // default function for allocating 
     static ogt_vox_free_func  g_free_func = _ogt_priv_free_default;   // default  function for freeing.
 
@@ -408,14 +408,14 @@
         }
     }
 
-    static void* _vox_malloc(size_t iSize) {
-        return iSize ? g_alloc_func(iSize) : NULL;
+    static void* _vox_malloc(size_t size) {
+        return size ? g_alloc_func(size) : NULL;
     }
 
-    static void* _vox_calloc(size_t iSize) {
-        void* pMem = _vox_malloc(iSize);
+    static void* _vox_calloc(size_t size) {
+        void* pMem = _vox_malloc(size);
         if (pMem)
-            memset(pMem, 0, iSize);
+            memset(pMem, 0, size);
         return pMem;
     }
 
@@ -883,9 +883,9 @@
                             uint8_t x = packed_voxel_data[i * 4 + 0];
                             uint8_t y = packed_voxel_data[i * 4 + 1];
                             uint8_t z = packed_voxel_data[i * 4 + 2];
-                            uint8_t colorIdx = packed_voxel_data[i * 4 + 3];
+                            uint8_t color_index = packed_voxel_data[i * 4 + 3];
                             assert(x < size_x && y < size_y && z < size_z);
-                            voxel_data[(x * k_stride_x) + (y * k_stride_y) + (z * k_stride_z)] = colorIdx;
+                            voxel_data[(x * k_stride_x) + (y * k_stride_y) + (z * k_stride_z)] = color_index;
                         }
                         _vox_file_seek_forwards(fp, num_voxels_in_chunk * 4);
                         // compute the hash of the voxels in this model-- used to accelerate duplicate models checking.
