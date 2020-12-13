@@ -2,7 +2,9 @@
 
 Open game tools is a set of unencumbered, free, lightweight, easy-to-integrate tools for use in game development. 
 
-So far it only contains the a MagicaVoxel scene reader, writer and merger [ogt_vox.h](https://github.com/jpaver/opengametools/blob/master/src/ogt_vox.h), but there will be more related tools to come.
+So far it only contains 
+- [ogt_vox.h](https://github.com/jpaver/opengametools/blob/master/src/ogt_vox.h) a MagicaVoxel scene reader, writer and merger
+- [ogt_voxel_meshify.h](https://github.com/jpaver/opengametools/blob/master/src/ogt_vox.h) a few routines to convert voxel grid data to triangle mesh.
 
 Please consider contributing fixes, extensions, bug reports or feature requests to this project. If you have example scenes that fail to load or save correctly, feel free to send them to me and I'd be happy to investigate and make fixes for you.
 
@@ -43,7 +45,7 @@ It should always work, but it may not give a good color fit if the voxel files y
 
 In the future, I might add a more holistic algorithm that prioritizes allocation to the final palette of colors based on their distance from other colors.
 
-## Usage
+### Usage
 
 See [demo_vox.cpp](https://github.com/jpaver/opengametools/blob/master/demo/demo_vox.cpp) for a simple example.
 
@@ -85,13 +87,25 @@ See [demo_vox.cpp](https://github.com/jpaver/opengametools/blob/master/demo/demo
    ```c++
    ogt_vox_destroy_scene(scene);
    ```
-## Note 
+### Note 
 
 The reader, writer and merge functionaliy supports the most relevant chunks as described here:
 - [MagicaVoxel-file-format-vox.txt](https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox.txt)
 - [MagicaVoxel-file-format-vox-extension.txt](https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox-extension.txt)
 
 Though rOBJ/MATT/MATL chunks are not supported for now. If there is interest, I can look into it.
+
+## ogt_voxel_meshify: converts voxel grid data to triangle mesh data
+
+This module contains 3 routines for converting paletted voxel grid data to triangle mesh data.
+
+- ogt_mesh_from_paletted_voxels_simple: returns the most naieve mesh possible, which will be tessellated at voxel granularity. 
+
+- ogt_mesh_from_paletted_voxels_greedy: uses a greedy box-expansion pass to replce rectangular regions of voxels of the same color with a larger polygon that covers the box. It will generally produce t-junctions which can make rasterization not water-tight based on your camera/project/distances.
+
+- ogt_mesh_from_paletted_voxels_polygon: will polygonize and triangulate connected voxels that are of the same color. The boundary of the polygon will be tessellated only to the degree that is necessary to there are tessellations at color discontinuities. Generally produces slightly more triangles that greedy meshing but it is mostly water-tight, except for a very small number of cases.
+
+More documentation and a demo will be added soon.
 
 ## Projects using open game tools
 
