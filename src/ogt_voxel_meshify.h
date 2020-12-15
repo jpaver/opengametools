@@ -65,9 +65,9 @@
 
         We support the following algorithms for meshing the voxel data for now:
 
-        * ogt_mesh_from_voxels_simple:  creates 2 triangles for every visible voxel face.
-        * ogt_mesh_from_voxels_greedy:  creates 2 triangles for every rectangular region of voxel faces with the same color
-        * ogt_mesh_from_voxels_polygon: determines the polygon contour of every connected voxel face with the same color and then triangulates that.
+        * ogt_mesh_from_paletted_voxels_simple:  creates 2 triangles for every visible voxel face.
+        * ogt_mesh_from_paletted_voxels_greedy:  creates 2 triangles for every rectangular region of voxel faces with the same color
+        * ogt_mesh_from_paletted_voxels_polygon: determines the polygon contour of every connected voxel face with the same color and then triangulates that.
 */
 #ifndef OGT_VOXEL_MESHIFY_H__
 #define OGT_VOXEL_MESHIFY_H__
@@ -189,20 +189,24 @@ struct ogt_mesh_bitset_64k {
     void unset(uint32_t index)  { bits[index/8] &= ~(1<<(index%8)); }
 };
 
-static void* _voxel_meshify_malloc(const ogt_voxel_meshify_context* ctx, size_t iSize) {
-    return iSize ? ctx->alloc_func(iSize, ctx->alloc_free_user_data) : NULL;
+static void* _voxel_meshify_malloc(const ogt_voxel_meshify_context* ctx, size_t size) {
+    return size ? (ctx->alloc_func ? ctx->alloc_func(size, ctx->alloc_free_user_data) : malloc(size)) : NULL;
 }
 
-static void* _voxel_meshify_calloc(const ogt_voxel_meshify_context* ctx, size_t iSize) {
-    void* pMem = _voxel_meshify_malloc(ctx, iSize);
+static void* _voxel_meshify_calloc(const ogt_voxel_meshify_context* ctx, size_t size) {
+    void* pMem = _voxel_meshify_malloc(ctx, size);
     if (pMem)
-        memset(pMem, 0, iSize);
+        memset(pMem, 0, size);
     return pMem;
 }
 
 static void _voxel_meshify_free(const ogt_voxel_meshify_context* ctx, void* old_ptr) {
-    if (old_ptr)
-        ctx->free_func(old_ptr, ctx->alloc_free_user_data);
+    if (old_ptr) {
+        if (ctx->free_func)
+            ctx->free_func(old_ptr, ctx->alloc_free_user_data);
+        else
+            free(old_ptr);
+    }
 }
 
 // column-major 4x4 matrix
@@ -214,7 +218,7 @@ struct ogt_mesh_transform  {
 };
 
 // replaces transforms the point computes: transform * (vec.x, vec.y, vec.z, 1.0)
-__forceinline ogt_mesh_vec3 _transform_point(const ogt_mesh_transform& transform, const ogt_mesh_vec3& vec) {
+inline ogt_mesh_vec3 _transform_point(const ogt_mesh_transform& transform, const ogt_mesh_vec3& vec) {
     ogt_mesh_vec3 ret;
     ret.x = transform.m30 + (transform.m00 * vec.x) + (transform.m10 * vec.y) + (transform.m20 * vec.z);
     ret.y = transform.m31 + (transform.m01 * vec.x) + (transform.m11 * vec.y) + (transform.m21 * vec.z);
@@ -223,7 +227,7 @@ __forceinline ogt_mesh_vec3 _transform_point(const ogt_mesh_transform& transform
 }
 
 // replaces transforms the point computes: transform * (vec.x, vec.y, vec.z, 0.0)
-__forceinline ogt_mesh_vec3 _transform_vector(const ogt_mesh_transform& transform, const ogt_mesh_vec3& vec) {
+inline ogt_mesh_vec3 _transform_vector(const ogt_mesh_transform& transform, const ogt_mesh_vec3& vec) {
     ogt_mesh_vec3 ret;
     ret.x = (transform.m00 * vec.x) + (transform.m10 * vec.y) + (transform.m20 * vec.z);
     ret.y = (transform.m01 * vec.x) + (transform.m11 * vec.y) + (transform.m21 * vec.z);
@@ -231,7 +235,7 @@ __forceinline ogt_mesh_vec3 _transform_vector(const ogt_mesh_transform& transfor
     return ret;
 }
 
-__forceinline ogt_mesh_transform _make_transform(
+inline ogt_mesh_transform _make_transform(
     float m00, float m01, float m02, float m03,
     float m10, float m11, float m12, float m13,
     float m20, float m21, float m22, float m23,
@@ -245,21 +249,21 @@ __forceinline ogt_mesh_transform _make_transform(
     return ret;
 }
 
-__forceinline ogt_mesh_vec3 _make_vec3(float x, float y, float z ) {
+inline ogt_mesh_vec3 _make_vec3(float x, float y, float z ) {
     ogt_mesh_vec3 ret;
     ret.x = x;	ret.y = y;	ret.z = z;
     return ret;
 }
 
-static __forceinline const ogt_mesh_vec3* _make_vec3_ptr(const float* xyz_elements) {
+static inline const ogt_mesh_vec3* _make_vec3_ptr(const float* xyz_elements) {
     return (ogt_mesh_vec3*)xyz_elements;
 }
 
-static __forceinline float _dot3(const ogt_mesh_vec3& a, const ogt_mesh_vec3& b) {
+static inline float _dot3(const ogt_mesh_vec3& a, const ogt_mesh_vec3& b) {
     return (a.x * b.x) + (a.y * b.y) + (a.z * b.z);
 }
 
-static __forceinline ogt_mesh_vec3 _cross3(const ogt_mesh_vec3& a, const ogt_mesh_vec3& b) {
+static inline ogt_mesh_vec3 _cross3(const ogt_mesh_vec3& a, const ogt_mesh_vec3& b) {
     ogt_mesh_vec3 ret;
     ret.x = (a.y * b.z) - (a.z * b.y);
     ret.y = (a.z * b.x) - (a.x * b.z);
@@ -267,21 +271,21 @@ static __forceinline ogt_mesh_vec3 _cross3(const ogt_mesh_vec3& a, const ogt_mes
     return ret;
 }
 
-static __forceinline ogt_mesh_vec3 _sub3(const ogt_mesh_vec3 & a, const ogt_mesh_vec3 & b) {
+static inline ogt_mesh_vec3 _sub3(const ogt_mesh_vec3 & a, const ogt_mesh_vec3 & b) {
     ogt_mesh_vec3 ret;
     ret.x = a.x - b.x;
     ret.y = a.y - b.y;
     ret.z = a.z - b.z;
     return ret;
 }
-static __forceinline ogt_mesh_vec3 _add3(const ogt_mesh_vec3 & a, const ogt_mesh_vec3 & b) {
+static inline ogt_mesh_vec3 _add3(const ogt_mesh_vec3 & a, const ogt_mesh_vec3 & b) {
     ogt_mesh_vec3 ret;
     ret.x = a.x + b.x;
     ret.y = a.y + b.y;
     ret.z = a.z + b.z;
     return ret;
 }
-static __forceinline ogt_mesh_vec3 _normalize3(const ogt_mesh_vec3 & a) {
+static inline ogt_mesh_vec3 _normalize3(const ogt_mesh_vec3 & a) {
     float len = sqrtf(a.x * a.x + a.y * a.y + a.z * a.z);
     assert(len > 0.0f);
     float len_inv = 1.0f / len;
@@ -292,7 +296,7 @@ static __forceinline ogt_mesh_vec3 _normalize3(const ogt_mesh_vec3 & a) {
     return ret;
 }
 
-static __forceinline ogt_mesh_vertex _mesh_make_vertex(const ogt_mesh_vec3& pos, const ogt_mesh_vec3& normal, const ogt_mesh_rgba color ) {
+static inline ogt_mesh_vertex _mesh_make_vertex(const ogt_mesh_vec3& pos, const ogt_mesh_vec3& normal, const ogt_mesh_rgba color ) {
     ogt_mesh_vertex ret;
     ret.pos    = pos;
     ret.normal = normal;
