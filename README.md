@@ -2,9 +2,10 @@
 
 Open game tools is a set of unencumbered, free, lightweight, easy-to-integrate tools for use in game development. 
 
-So far it only contains 
+So far it contains: 
 - [ogt_vox.h](https://github.com/jpaver/opengametools/blob/master/src/ogt_vox.h) a MagicaVoxel scene reader, writer and merger
 - [ogt_voxel_meshify.h](https://github.com/jpaver/opengametools/blob/master/src/ogt_vox.h) a few routines to convert voxel grid data to triangle mesh.
+- [vox2fbx.cpp](https://github.com/jpaver/opengametools/blob/master/apps/vox2fbx.cpp) an application to extract models from .vox and save them to ascii fbx
 
 Please consider contributing fixes, extensions, bug reports or feature requests to this project. If you have example scenes that fail to load or save correctly, feel free to send them to me and I'd be happy to investigate and make fixes for you.
 
