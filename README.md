@@ -108,6 +108,17 @@ This module contains 3 routines for converting paletted voxel grid data to trian
 
 More documentation and a demo will be added soon.
 
+## vox2fbx: Tool for extracting meshifying models from Magicavoxel .vox and saving them to .fbx
+
+This is a command-line tool which will find all named voxel grid models in a vox file, turn them into a mesh using one of 3 algorithms (simple, greedy or polygon) each of which produce different density mesh with varying levels of water-tightness (ie. t-junctions), then save those meshes out to individual fbx files.
+
+It can be used from command-line with these args:
+ --mesh_algorithm <algo> : (default: polygon) sets the meshing mode where <algo> is one of: simple, greedy or polygon
+ --named-models-only     : (default: disabled) will only generate an fbx for models in the vox file that have named instances
+ --y-as-up               : (default: disabled) rotate model on export so that y is up
+
+It can also be used from windows explorer by dragging-and-drop your .vox files onto it, and it will produce an output fbx file for each grid model in each .vox file.
+
 ## Projects using open game tools
 
  - https://wiki.voxelplugin.com/Main_Page ( https://github.com/Phyronnaz/VoxelPlugin )
