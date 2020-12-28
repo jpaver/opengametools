@@ -9,7 +9,7 @@
 */
 
 #define OGT_VOX_IMPLEMENTATION
-#include "..\src\ogt_vox.h"
+#include "../src/ogt_vox.h"
 
 #if defined(_MSC_VER)
     #include <io.h>
