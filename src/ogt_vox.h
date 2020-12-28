@@ -592,19 +592,22 @@
         return default_value;
     }
 
+    // lookup table for _vox_make_transform_from_dict_strings
+    static const vec3 k_vectors[4] = {
+	vec3_make(1.0f, 0.0f, 0.0f),
+	vec3_make(0.0f, 1.0f, 0.0f),
+	vec3_make(0.0f, 0.0f, 1.0f),
+	vec3_make(0.0f, 0.0f, 0.0f)    // invalid!
+    };
+
+    // lookup table for _vox_make_transform_from_dict_strings
+    static const uint32_t k_row2_index[] = { UINT32_MAX, UINT32_MAX, UINT32_MAX, 2, UINT32_MAX, 1, 0, UINT32_MAX };
+
+
     static ogt_vox_transform _vox_make_transform_from_dict_strings(const char* rotation_string, const char* translation_string) {
         ogt_vox_transform transform = _vox_transform_identity();
 
         if (rotation_string != NULL) {
-            static vec3 k_vectors[4] = {
-                vec3_make(1.0f, 0.0f, 0.0f),
-                vec3_make(0.0f, 1.0f, 0.0f),
-                vec3_make(0.0f, 0.0f, 1.0f),
-                vec3_make(0.0f, 0.0f, 0.0f)    // invalid!
-            };
-
-            static const uint32_t k_row2_index[] = { UINT32_MAX, UINT32_MAX, UINT32_MAX, 2, UINT32_MAX, 1, 0, UINT32_MAX };
-
             // compute the per-row indexes into k_vectors[] array.
             // unpack rotation bits. 
             //  bits  : meaning
