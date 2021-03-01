@@ -134,9 +134,14 @@ typedef void  (*ogt_voxel_meshify_free_func)(void* ptr, void* user_data);
 // a context that allows you to override various internal operations of the below api functions.
 struct ogt_voxel_meshify_context
 {
-    ogt_voxel_meshify_alloc_func                alloc_func;                 // override allocation function
-    ogt_voxel_meshify_free_func                 free_func;                  // override free function
-    void*                                       alloc_free_user_data;       // alloc/free user-data (passed to alloc_func / free_func )
+    ogt_voxel_meshify_alloc_func alloc_func;                 // override allocation function
+    ogt_voxel_meshify_free_func  free_func;                  // override free function
+    void*                        alloc_free_user_data;       // alloc/free user-data (passed to alloc_func / free_func )
+
+    // for each tessellated voxel that produces 1 or more vertices, call an optionally
+    // provided user function which allows them to modify the vertex information if needed 
+    void                         (*emit_verts_cb)(uint32_t x, uint32_t y, uint32_t z, ogt_mesh_vertex* verts, uint32_t count, void* cb_ctx);
+    void*                        cb_ctx; // provides user defined contextual information to their callback function emit_verts_cb.
 };
 
 // The simple meshifier returns the most naieve mesh possible, which will be tessellated at voxel granularity. 
@@ -578,6 +583,10 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                 const float min_x = (float)i;
                 const float max_x = min_x + 1.0f;
 
+                // the vertex we are starting to tessalate 
+                ogt_mesh_vertex* start_vert = &mesh->vertices[mesh->vertex_count];
+                uint32_t         start_vert_count = mesh->vertex_count;
+
                 // -X direction face
                 if ((i == 0) || (current_voxel[-k_stride_x] == 0))
                 {
@@ -687,6 +696,12 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     current_index[5] = mesh->vertex_count + 0;
                     mesh->vertex_count += 4;
                     mesh->index_count  += 6;						
+                }
+
+                uint32_t count = mesh->vertex_count - start_vert_count;
+                if (NULL != ctx->emit_verts_cb)
+                {
+                    ctx->emit_verts_cb(i, j, k, start_vert, count, ctx->cb_ctx);
                 }
             }
         }
