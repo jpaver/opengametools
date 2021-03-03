@@ -141,6 +141,8 @@ struct ogt_voxel_meshify_context
     // for each tessellated voxel that produces 1 or more vertices, call an optionally
     // provided user function which allows them to modify the vertex information if needed 
     void                         (*emit_verts_cb)(uint32_t x, uint32_t y, uint32_t z, ogt_mesh_vertex* verts, uint32_t count, void* cb_ctx);
+    // TODO
+    uint32_t                     (*vert_count_cb)();
     void*                        cb_ctx; // provides user defined contextual information to their callback function emit_verts_cb.
 };
 
@@ -583,7 +585,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                 const float min_x = (float)i;
                 const float max_x = min_x + 1.0f;
 
-                // the vertex we are starting to tessalate 
+                // the vertex we are starting to tessellate 
                 ogt_mesh_vertex* start_vert = &mesh->vertices[mesh->vertex_count];
                 uint32_t         start_vert_count = mesh->vertex_count;
 
