@@ -131,19 +131,24 @@ typedef void* (*ogt_voxel_meshify_alloc_func)(size_t size, void* user_data);
 // free memory function interface. pass in a pointer previously allocated and it will be released back to the system managing memory.
 typedef void  (*ogt_voxel_meshify_free_func)(void* ptr, void* user_data);
 
+// user provided callback function which provides them with the number of vertices which will be emitted.
+typedef void (*ogt_voxel_meshify_simple_count_func)(uint32_t vert_count, uint32_t index_count, void* cb_ctx);
+
+// for each tessellated voxel that produces 1 or more vertices, call an optionally provided user function which allows them to manage memory directly
+// and, if desired, modify the vertex values before copying them into their datastructures.
+typedef void (*ogt_voxel_meshify_simple_emit_func)(uint32_t x, uint32_t y, uint32_t z, ogt_mesh_vertex* verts, uint32_t vert_count, uint32_t* indices, uint32_t index_count, void* cb_ctx);
+
+
 // a context that allows you to override various internal operations of the below api functions.
 struct ogt_voxel_meshify_context
 {
-    ogt_voxel_meshify_alloc_func alloc_func;                 // override allocation function
-    ogt_voxel_meshify_free_func  free_func;                  // override free function
-    void*                        alloc_free_user_data;       // alloc/free user-data (passed to alloc_func / free_func )
+    ogt_voxel_meshify_alloc_func            alloc_func;                 // override allocation function
+    ogt_voxel_meshify_free_func             free_func;                  // override free function
+    void*                                   alloc_free_user_data;       // alloc/free user-data (passed to alloc_func / free_func )
 
-    // for each tessellated voxel that produces 1 or more vertices, call an optionally
-    // provided user function which allows them to modify the vertex information if needed 
-    void                         (*emit_verts_cb)(uint32_t x, uint32_t y, uint32_t z, ogt_mesh_vertex* verts, uint32_t count, void* cb_ctx);
-    // TODO
-    uint32_t                     (*vert_count_cb)();
-    void*                        cb_ctx; // provides user defined contextual information to their callback function emit_verts_cb.
+    void*                                   simple_cb_ctx;     // provides user defined contextual information to the ogt_voxel_meshify_simple_* callback functions.
+    ogt_voxel_meshify_simple_count_func     simple_count_cb;   // callback gives the caller a heads-up of how much memory will need to be allocated
+    ogt_voxel_meshify_simple_emit_func      simple_emit_cb; // callback called after a voxel has been tessellated, providing voxel index, vertices and indices
 };
 
 // The simple meshifier returns the most naieve mesh possible, which will be tessellated at voxel granularity. 
@@ -546,15 +551,29 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
     uint32_t max_vertex_count = max_face_count * 4;
     uint32_t max_index_count  = max_face_count * 6;
     
-    uint32_t mesh_size = sizeof(ogt_mesh) + (max_vertex_count * sizeof(ogt_mesh_vertex)) + (max_index_count * sizeof(uint32_t));
-    ogt_mesh* mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
-    if (!mesh)
-        return NULL;
+    bool no_alloc = (NULL != ctx->simple_count_cb && NULL != ctx->simple_emit_cb); 
+    ogt_mesh* mesh = NULL;
+
+    uint32_t vertex_count = 0, index_count = 0;
+
+    if (no_alloc)
+    {
+        ctx->simple_count_cb(max_vertex_count, max_index_count, ctx->simple_cb_ctx);
+    }
+    else
+    {
+        uint32_t mesh_size = sizeof(ogt_mesh) + (max_vertex_count * sizeof(ogt_mesh_vertex)) + (max_index_count * sizeof(uint32_t));
+        mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
+        if (!mesh)
+            return NULL;
+
+        mesh->vertices = (ogt_mesh_vertex*)&mesh[1];
+        mesh->indices  = (uint32_t*)&mesh->vertices[max_vertex_count];
+        mesh->vertex_count = 0;
+        mesh->index_count  = 0;
+    }
     
-    mesh->vertices = (ogt_mesh_vertex*)&mesh[1];
-    mesh->indices  = (uint32_t*)&mesh->vertices[max_vertex_count];
-    mesh->vertex_count = 0;
-    mesh->index_count  = 0;
+
     
     const int32_t k_stride_x = 1;
     const int32_t k_stride_y = size_x;
@@ -564,6 +583,11 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
     const int32_t k_max_z = size_z - 1;
     
     const uint8_t* current_voxel = voxels;
+
+    ogt_mesh_vertex no_alloc_verts[24];
+    uint32_t        no_alloc_indices[36];
+    uint32_t        no_alloc_start_vert_count;
+    uint32_t        no_alloc_start_index_count;
 
     for (uint32_t k = 0; k < size_z; k++)
     {
@@ -579,138 +603,163 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                 if (current_voxel[0] == 0)
                     continue;
 
-                ogt_mesh_rgba color = palette[ current_voxel[0]];
+                ogt_mesh_rgba color = palette[current_voxel[0]];
                 
                 // determine the min/max coords of the voxel for each dimension.
                 const float min_x = (float)i;
                 const float max_x = min_x + 1.0f;
 
                 // the vertex we are starting to tessellate 
-                ogt_mesh_vertex* start_vert = &mesh->vertices[mesh->vertex_count];
-                uint32_t         start_vert_count = mesh->vertex_count;
+                ogt_mesh_vertex* start_vert;
+                uint32_t* start_index;
+
+                if (no_alloc)
+                {
+                    start_vert = no_alloc_verts - vertex_count;
+                    start_index = no_alloc_indices - index_count;
+                    no_alloc_start_vert_count = vertex_count;
+                    no_alloc_start_index_count = index_count;
+                }
+                else
+                {
+                    start_vert = &mesh->vertices[mesh->vertex_count];                
+                    start_index = &mesh->indices[mesh->index_count];
+                }
 
                 // -X direction face
                 if ((i == 0) || (current_voxel[-k_stride_x] == 0))
                 {
-                    ogt_mesh_vertex* current_vertex = &mesh->vertices[mesh->vertex_count];
-                    uint32_t*        current_index  = &mesh->indices[mesh->index_count];
+                    ogt_mesh_vertex* current_vertex = &start_vert[vertex_count];
+                    uint32_t*        current_index  = &start_index[index_count];
                     current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, -1.0f, 0.0f, 0.0f, color );
                     current_vertex[1] = _mesh_make_vertex( min_x, max_y, min_z, -1.0f, 0.0f, 0.0f, color );
                     current_vertex[2] = _mesh_make_vertex( min_x, max_y, max_z, -1.0f, 0.0f, 0.0f, color );
                     current_vertex[3] = _mesh_make_vertex( min_x, min_y, max_z, -1.0f, 0.0f, 0.0f, color );
-                    current_index[0] = mesh->vertex_count + 2;
-                    current_index[1] = mesh->vertex_count + 1;
-                    current_index[2] = mesh->vertex_count + 0;
-                    current_index[3] = mesh->vertex_count + 0;
-                    current_index[4] = mesh->vertex_count + 3;
-                    current_index[5] = mesh->vertex_count + 2;
-                    mesh->vertex_count += 4;
-                    mesh->index_count  += 6;
+                    current_index[0] = vertex_count + 2;
+                    current_index[1] = vertex_count + 1;
+                    current_index[2] = vertex_count + 0;
+                    current_index[3] = vertex_count + 0;
+                    current_index[4] = vertex_count + 3;
+                    current_index[5] = vertex_count + 2;
+                    vertex_count += 4;
+                    index_count  += 6;
                 }
                 
                 // +X direction face
                 if ((i == k_max_x) || (current_voxel[ k_stride_x] == 0 ))
                 {
-                    ogt_mesh_vertex* current_vertex = &mesh->vertices[mesh->vertex_count];
-                    uint32_t*        current_index  = &mesh->indices[mesh->index_count];
+                    ogt_mesh_vertex* current_vertex = &start_vert[vertex_count];
+                    uint32_t*        current_index  = &start_index[index_count];
                     current_vertex[0] = _mesh_make_vertex( max_x, min_y, min_z, 1.0f, 0.0f, 0.0f, color );
                     current_vertex[1] = _mesh_make_vertex( max_x, max_y, min_z, 1.0f, 0.0f, 0.0f, color );
                     current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 1.0f, 0.0f, 0.0f, color );
                     current_vertex[3] = _mesh_make_vertex( max_x, min_y, max_z, 1.0f, 0.0f, 0.0f, color );
-                    current_index[0] = mesh->vertex_count + 0;
-                    current_index[1] = mesh->vertex_count + 1;
-                    current_index[2] = mesh->vertex_count + 2;
-                    current_index[3] = mesh->vertex_count + 2;
-                    current_index[4] = mesh->vertex_count + 3;
-                    current_index[5] = mesh->vertex_count + 0;
-                    mesh->vertex_count += 4;
-                    mesh->index_count  += 6;
+                    current_index[0] = vertex_count + 0;
+                    current_index[1] = vertex_count + 1;
+                    current_index[2] = vertex_count + 2;
+                    current_index[3] = vertex_count + 2;
+                    current_index[4] = vertex_count + 3;
+                    current_index[5] = vertex_count + 0;
+                    vertex_count += 4;
+                    index_count  += 6;
                 }
                 
                 // -Y direction face
                 if ((j == 0) || (current_voxel[-k_stride_y] == 0 ))
                 {
-                    ogt_mesh_vertex* current_vertex = &mesh->vertices[mesh->vertex_count];
-                    uint32_t*        current_index  = &mesh->indices[mesh->index_count];
+                    ogt_mesh_vertex* current_vertex = &start_vert[vertex_count];
+                    uint32_t*        current_index  = &start_index[index_count];
                     current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color );
                     current_vertex[1] = _mesh_make_vertex( max_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color );
                     current_vertex[2] = _mesh_make_vertex( max_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color );
                     current_vertex[3] = _mesh_make_vertex( min_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color );
-                    current_index[0] = mesh->vertex_count + 0;
-                    current_index[1] = mesh->vertex_count + 1;
-                    current_index[2] = mesh->vertex_count + 2;
-                    current_index[3] = mesh->vertex_count + 2;
-                    current_index[4] = mesh->vertex_count + 3;
-                    current_index[5] = mesh->vertex_count + 0;
-                    mesh->vertex_count += 4;
-                    mesh->index_count  += 6;					
+                    current_index[0] = vertex_count + 0;
+                    current_index[1] = vertex_count + 1;
+                    current_index[2] = vertex_count + 2;
+                    current_index[3] = vertex_count + 2;
+                    current_index[4] = vertex_count + 3;
+                    current_index[5] = vertex_count + 0;
+                    vertex_count += 4;
+                    index_count  += 6;					
                 }
                 // +Y direction face
                 if ((j == k_max_y) || (current_voxel[ k_stride_y] == 0 ))
                 {
-                    ogt_mesh_vertex* current_vertex = &mesh->vertices[mesh->vertex_count];
-                    uint32_t*        current_index  = &mesh->indices[mesh->index_count];
+                    ogt_mesh_vertex* current_vertex = &start_vert[vertex_count];
+                    uint32_t*        current_index  = &start_index[index_count];
                     current_vertex[0] = _mesh_make_vertex( min_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color );
                     current_vertex[1] = _mesh_make_vertex( max_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color );
                     current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color );
                     current_vertex[3] = _mesh_make_vertex( min_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color );
-                    current_index[0] = mesh->vertex_count + 2;
-                    current_index[1] = mesh->vertex_count + 1;
-                    current_index[2] = mesh->vertex_count + 0;
-                    current_index[3] = mesh->vertex_count + 0;
-                    current_index[4] = mesh->vertex_count + 3;
-                    current_index[5] = mesh->vertex_count + 2;
-                    mesh->vertex_count += 4;
-                    mesh->index_count  += 6;						
+                    current_index[0] = vertex_count + 2;
+                    current_index[1] = vertex_count + 1;
+                    current_index[2] = vertex_count + 0;
+                    current_index[3] = vertex_count + 0;
+                    current_index[4] = vertex_count + 3;
+                    current_index[5] = vertex_count + 2;
+                    vertex_count += 4;
+                    index_count  += 6;						
                 }
                 // -Z direction face
                 if ((k == 0)       || (current_voxel[-k_stride_z] == 0 ))
                 {
-                    ogt_mesh_vertex* current_vertex = &mesh->vertices[mesh->vertex_count];
-                    uint32_t*        current_index  = &mesh->indices[mesh->index_count];
+                    ogt_mesh_vertex* current_vertex = &start_vert[vertex_count];
+                    uint32_t*        current_index  = &start_index[index_count];
                     current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color );
                     current_vertex[1] = _mesh_make_vertex( max_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color );
                     current_vertex[2] = _mesh_make_vertex( max_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color );
                     current_vertex[3] = _mesh_make_vertex( min_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color );
-                    current_index[0] = mesh->vertex_count + 2;
-                    current_index[1] = mesh->vertex_count + 1;
-                    current_index[2] = mesh->vertex_count + 0;
-                    current_index[3] = mesh->vertex_count + 0;
-                    current_index[4] = mesh->vertex_count + 3;
-                    current_index[5] = mesh->vertex_count + 2;
-                    mesh->vertex_count += 4;
-                    mesh->index_count  += 6;						
+                    current_index[0] = vertex_count + 2;
+                    current_index[1] = vertex_count + 1;
+                    current_index[2] = vertex_count + 0;
+                    current_index[3] = vertex_count + 0;
+                    current_index[4] = vertex_count + 3;
+                    current_index[5] = vertex_count + 2;
+                    vertex_count += 4;
+                    index_count  += 6;						
                 }
                 // +Z direction face
                 if ((k == k_max_z) || (current_voxel[ k_stride_z] == 0 ))
                 {
-                    ogt_mesh_vertex* current_vertex = &mesh->vertices[mesh->vertex_count];
-                    uint32_t*        current_index  = &mesh->indices[mesh->index_count];
+                    ogt_mesh_vertex* current_vertex = &start_vert[vertex_count];
+                    uint32_t*        current_index  = &start_index[index_count];
                     current_vertex[0] = _mesh_make_vertex( min_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color );
                     current_vertex[1] = _mesh_make_vertex( max_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color );
                     current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color );
                     current_vertex[3] = _mesh_make_vertex( min_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color );
-                    current_index[0] = mesh->vertex_count + 0;
-                    current_index[1] = mesh->vertex_count + 1;
-                    current_index[2] = mesh->vertex_count + 2;
-                    current_index[3] = mesh->vertex_count + 2;
-                    current_index[4] = mesh->vertex_count + 3;
-                    current_index[5] = mesh->vertex_count + 0;
-                    mesh->vertex_count += 4;
-                    mesh->index_count  += 6;						
+                    current_index[0] = vertex_count + 0;
+                    current_index[1] = vertex_count + 1;
+                    current_index[2] = vertex_count + 2;
+                    current_index[3] = vertex_count + 2;
+                    current_index[4] = vertex_count + 3;
+                    current_index[5] = vertex_count + 0;
+                    vertex_count += 4;
+                    index_count  += 6;						
                 }
 
-                uint32_t count = mesh->vertex_count - start_vert_count;
-                if (NULL != ctx->emit_verts_cb)
+                if (NULL != ctx->simple_emit_cb)
                 {
-                    ctx->emit_verts_cb(i, j, k, start_vert, count, ctx->cb_ctx);
+                    uint32_t v_count = vertex_count - no_alloc_start_vert_count;
+                    uint32_t i_count = index_count - no_alloc_start_index_count;
+                    ctx->simple_emit_cb(
+                        i, j, k, 
+                        start_vert + no_alloc_start_vert_count, v_count, 
+                        start_index + no_alloc_start_index_count, i_count,
+                        ctx->simple_cb_ctx
+                    );
                 }
             }
         }
     }	
 
-    assert( mesh->vertex_count == max_vertex_count);
-    assert( mesh->index_count == max_index_count);	
+    if (!no_alloc)
+    {
+        mesh->vertex_count = vertex_count;
+        mesh->index_count = index_count;
+    }
+
+    assert( vertex_count == max_vertex_count);
+    assert( index_count == max_index_count);	
     return mesh;
 }
 
