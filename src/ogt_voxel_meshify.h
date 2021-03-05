@@ -2,7 +2,7 @@
     opengametools voxel meshifier - v0.9 - MIT license - Justin Paver, April 2020
 
     This is a single-header-file library that provides easy-to-use
-    support for converting paletted voxel grid data into an indexed triangle mesh. 
+    support for converting paletted voxel grid data into an indexed triangle mesh.
 
     Please see the MIT license information at the end of this file.
 
@@ -19,11 +19,11 @@
     2. convert into a mesh
 
         ogt_mesh* mesh = ogt_mesh_from_paletted_voxels_simple( voxel_data, size_x, size_y, size_z, voxel_palette );
-    
+
     3. use the indexed triangle list in the mesh to construct renderable geometry, collision geometry.
 
         // This is old sceen OpenGL immediate mode rendering for demonstration purposes only.
-        // Ideally you'd use more modern practices for rendering, including converting ogt_mesh data to 
+        // Ideally you'd use more modern practices for rendering, including converting ogt_mesh data to
         // your own engine's layout.
 
         glBegin(GL_TRIANGLES);
@@ -58,7 +58,7 @@
         For this reason, palette[0] will never be used.
 
         Voxel data is laid out in x, then y, then z order. In other words, given
-        a coordinate (x,y,z) within your grid, you can compute where it is in your voxel 
+        a coordinate (x,y,z) within your grid, you can compute where it is in your voxel
         array using the following logic:
 
             voxel_index = x + (y * size_x) + (z * size_x * size_y);
@@ -73,7 +73,7 @@
 #define OGT_VOXEL_MESHIFY_H__
 
 
-#if _MSC_VER == 1400	
+#if _MSC_VER == 1400
     // VS2005 doesn't have inttypes or stdint so we just define what we need here.
     typedef unsigned char uint8_t;
     typedef signed int    int32_t;
@@ -83,7 +83,7 @@
         #define UINT32_MAX	0xFFFFFFFF
     #endif
 #elif defined(_MSC_VER)
-    // general VS* 
+    // general VS*
     #include <inttypes.h>
 #elif __APPLE__
     // general Apple compiler
@@ -97,7 +97,7 @@
 
 
 // a 3 dimensional quantity
-struct ogt_mesh_vec3 
+struct ogt_mesh_vec3
 {
     float x, y, z;
 };
@@ -117,7 +117,7 @@ struct ogt_mesh_vertex
 };
 
 // a mesh that contains an indexed triangle list of vertices
-struct ogt_mesh 
+struct ogt_mesh
 {
     uint32_t         vertex_count;	// number of vertices
     uint32_t         index_count;	// number of indices
@@ -146,12 +146,16 @@ struct ogt_voxel_meshify_context
     ogt_voxel_meshify_free_func             free_func;                  // override free function
     void*                                   alloc_free_user_data;       // alloc/free user-data (passed to alloc_func / free_func )
 
-    void*                                   simple_cb_ctx;     // provides user defined contextual information to the ogt_voxel_meshify_simple_* callback functions.
+    // The following function pointers can be used to override the default behavior of ogt_mesh_from_paletted_voxels_simple
+    // and prevent it from allocation any memory. Instead, the caller is informed how many vertices and indices will be
+    // needed, and then for each voxel tessellated simple_emit_cb is called, which passes the corresponding ogt_mesh_vertex
+    // vertices to the caller.
     ogt_voxel_meshify_simple_count_func     simple_count_cb;   // callback gives the caller a heads-up of how much memory will need to be allocated
     ogt_voxel_meshify_simple_emit_func      simple_emit_cb; // callback called after a voxel has been tessellated, providing voxel index, vertices and indices
+    void*                                   simple_cb_ctx;     // provides user defined contextual information to the ogt_voxel_meshify_simple_* callback functions.
 };
 
-// The simple meshifier returns the most naieve mesh possible, which will be tessellated at voxel granularity. 
+// The simple meshifier returns the most naieve mesh possible, which will be tessellated at voxel granularity.
 ogt_mesh* ogt_mesh_from_paletted_voxels_simple(const ogt_voxel_meshify_context* ctx, const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette);
 
 // The greedy meshifier will use a greedy box-expansion pass to replace the polygons of adjacent voxels of the same color with a larger polygon that covers the box.
@@ -173,7 +177,7 @@ void      ogt_mesh_smooth_normals(const ogt_voxel_meshify_context* ctx, ogt_mesh
 
 // destroys the mesh returned by ogt_mesh_from_paletted_voxels* functions.
 void      ogt_mesh_destroy(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh );
-    
+
 #endif // OGT_VOXEL_MESHIFY_H__
 
 //-----------------------------------------------------------------------------------------------------------------
@@ -330,7 +334,7 @@ static uint32_t _count_voxel_sized_faces( const uint8_t* voxels, uint32_t size_x
     const int32_t k_max_z = size_z - 1;
 
     uint32_t face_count  = 0;
-        
+
     const uint8_t* current_voxel = voxels;
     for (uint32_t k = 0; k < size_z; k++)
     {
@@ -357,7 +361,7 @@ static uint32_t _count_voxel_sized_faces( const uint8_t* voxels, uint32_t size_x
 
 // murmur_hash2 - this variant deals with only 4 bytes at a time
 static uint32_t murmur_hash2_size4(uint32_t h, const uint32_t* data, uint32_t data_len) {
-    assert(data_len % 4 == 0);	
+    assert(data_len % 4 == 0);
     const uint32_t m = 0x5bd1e995;
     while (data_len >= 4) {
         uint32_t k = data[0];
@@ -393,12 +397,12 @@ static uint32_t* hash_table_find_vertex(uint32_t* table, uint32_t table_index_ma
         bucket_index = (bucket_index + probe_count + 1) & table_index_mask;
     }
     // hash table is full. We should technically never get here because we always allocate more buckets in the table than vertices we search for.
-    assert(false); 
+    assert(false);
     return NULL;
 }
 
 
-// quadratic probing in the hash table 
+// quadratic probing in the hash table
 static uint32_t* hash_table_find_vertex_position(uint32_t* table, uint32_t table_index_mask, const ogt_mesh_vertex* vertex_data, uint32_t vertex_index) {
     const ogt_mesh_vertex* this_vertex = &vertex_data[vertex_index];
     uint32_t  bucket_index = murmur_hash2_size4(0, (uint32_t*)& this_vertex->pos, sizeof(this_vertex->pos)) & table_index_mask;
@@ -424,14 +428,14 @@ static uint32_t* hash_table_find_vertex_position(uint32_t* table, uint32_t table
 
 // removes duplicate vertices in-place from the specified mesh.
 void ogt_mesh_remove_duplicate_vertices(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh) {
-    
+
     uint32_t* indices      = mesh->indices;
     uint32_t  index_count  = mesh->index_count;
     uint8_t*  vertices     = (uint8_t*)mesh->vertices;
     uint32_t  vertex_count = mesh->vertex_count;
     uint32_t  vertex_size  = sizeof(ogt_mesh_vertex);
     assert(indices && index_count && vertices && vertex_count && vertex_size);
-    
+
     // allocate a hash table that is sized at the next power of 2 above the vertex count
     uint32_t hash_table_size = 1;
     while (hash_table_size < vertex_count)
@@ -506,7 +510,7 @@ void ogt_mesh_smooth_normals(const ogt_voxel_meshify_context* ctx, ogt_mesh* mes
                 remap_indices[vertex_index] = remap_indices[*hash_table_entry];
             }
         }
-        // now that we have remap_indices, we no longer need the hash table. 
+        // now that we have remap_indices, we no longer need the hash table.
         _voxel_meshify_free(ctx, hash_table);
     }
 
@@ -545,13 +549,13 @@ void ogt_mesh_smooth_normals(const ogt_voxel_meshify_context* ctx, ogt_mesh* mes
 // constructs and returns a mesh from the specified voxel grid with no optimization to the geometry.
 ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
     const ogt_voxel_meshify_context* ctx,
-    const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette) 
+    const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette)
 {
     uint32_t max_face_count   = _count_voxel_sized_faces( voxels, size_x, size_y, size_z );
     uint32_t max_vertex_count = max_face_count * 4;
     uint32_t max_index_count  = max_face_count * 6;
-    
-    bool no_alloc = (NULL != ctx->simple_count_cb && NULL != ctx->simple_emit_cb); 
+
+    bool no_alloc = (NULL != ctx->simple_count_cb && NULL != ctx->simple_emit_cb);
     ogt_mesh* mesh = NULL;
 
     uint32_t vertex_count = 0, index_count = 0;
@@ -572,16 +576,16 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
         mesh->vertex_count = 0;
         mesh->index_count  = 0;
     }
-    
 
-    
+
+
     const int32_t k_stride_x = 1;
     const int32_t k_stride_y = size_x;
     const int32_t k_stride_z = size_x * size_y;
     const int32_t k_max_x = size_x - 1;
     const int32_t k_max_y = size_y - 1;
     const int32_t k_max_z = size_z - 1;
-    
+
     const uint8_t* current_voxel = voxels;
 
     ogt_mesh_vertex no_alloc_verts[24];
@@ -604,12 +608,12 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     continue;
 
                 ogt_mesh_rgba color = palette[current_voxel[0]];
-                
+
                 // determine the min/max coords of the voxel for each dimension.
                 const float min_x = (float)i;
                 const float max_x = min_x + 1.0f;
 
-                // the vertex we are starting to tessellate 
+                // the vertex we are starting to tessellate
                 ogt_mesh_vertex* start_vert;
                 uint32_t* start_index;
 
@@ -622,7 +626,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                 }
                 else
                 {
-                    start_vert = &mesh->vertices[mesh->vertex_count];                
+                    start_vert = &mesh->vertices[mesh->vertex_count];
                     start_index = &mesh->indices[mesh->index_count];
                 }
 
@@ -644,7 +648,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     vertex_count += 4;
                     index_count  += 6;
                 }
-                
+
                 // +X direction face
                 if ((i == k_max_x) || (current_voxel[ k_stride_x] == 0 ))
                 {
@@ -663,7 +667,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     vertex_count += 4;
                     index_count  += 6;
                 }
-                
+
                 // -Y direction face
                 if ((j == 0) || (current_voxel[-k_stride_y] == 0 ))
                 {
@@ -680,7 +684,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     current_index[4] = vertex_count + 3;
                     current_index[5] = vertex_count + 0;
                     vertex_count += 4;
-                    index_count  += 6;					
+                    index_count  += 6;
                 }
                 // +Y direction face
                 if ((j == k_max_y) || (current_voxel[ k_stride_y] == 0 ))
@@ -698,7 +702,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     current_index[4] = vertex_count + 3;
                     current_index[5] = vertex_count + 2;
                     vertex_count += 4;
-                    index_count  += 6;						
+                    index_count  += 6;
                 }
                 // -Z direction face
                 if ((k == 0)       || (current_voxel[-k_stride_z] == 0 ))
@@ -716,7 +720,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     current_index[4] = vertex_count + 3;
                     current_index[5] = vertex_count + 2;
                     vertex_count += 4;
-                    index_count  += 6;						
+                    index_count  += 6;
                 }
                 // +Z direction face
                 if ((k == k_max_z) || (current_voxel[ k_stride_z] == 0 ))
@@ -734,7 +738,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     current_index[4] = vertex_count + 3;
                     current_index[5] = vertex_count + 0;
                     vertex_count += 4;
-                    index_count  += 6;						
+                    index_count  += 6;
                 }
 
                 if (NULL != ctx->simple_emit_cb)
@@ -742,15 +746,15 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
                     uint32_t v_count = vertex_count - no_alloc_start_vert_count;
                     uint32_t i_count = index_count - no_alloc_start_index_count;
                     ctx->simple_emit_cb(
-                        i, j, k, 
-                        start_vert + no_alloc_start_vert_count, v_count, 
+                        i, j, k,
+                        start_vert + no_alloc_start_vert_count, v_count,
                         start_index + no_alloc_start_index_count, i_count,
                         ctx->simple_cb_ctx
                     );
                 }
             }
         }
-    }	
+    }
 
     if (!no_alloc)
     {
@@ -759,16 +763,16 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
     }
 
     assert( vertex_count == max_vertex_count);
-    assert( index_count == max_index_count);	
+    assert( index_count == max_index_count);
     return mesh;
 }
 
 
 // The base algorithm that is used here, is as follows:
-// On a per slice basis, we find a voxel that has not yet been polygonized. We then try to 
+// On a per slice basis, we find a voxel that has not yet been polygonized. We then try to
 // grow a rectangle from that voxel within the slice that can be represented by a polygon.
 // We create the quad polygon to represent the voxel, mark the voxels in the slice that are
-// covered by the rectangle as having been polygonized, and continue on the search through 
+// covered by the rectangle as having been polygonized, and continue on the search through
 // the rest of the slice.
 void _greedy_meshify_voxels_in_face_direction(
     const uint8_t* voxels,
@@ -783,7 +787,7 @@ void _greedy_meshify_voxels_in_face_direction(
     uint32_t max_voxels_per_slice = size_x * size_y;
 
     // allocate a structure that is used for tracking which voxels in a slice have already been included in output mesh.
-    assert(max_voxels_per_slice <= 65536);	// 
+    assert(max_voxels_per_slice <= 65536);	//
     ogt_mesh_bitset_64k voxel_polygonized;
 
     ogt_mesh_vec3 normal = _transform_vector(transform, _make_vec3(0.0f, 0.0f, 1.0f));
@@ -859,7 +863,7 @@ void _greedy_meshify_voxels_in_face_direction(
                 }
 
 
-                // now j1 and i1 are the upper bound (exclusive) of the rectangle starting from i0,j0. 
+                // now j1 and i1 are the upper bound (exclusive) of the rectangle starting from i0,j0.
                 // mark all of this slice voxels in that rectangle as processed.
                 for (int32_t b = j0; b < j1; b++)
                     for (int32_t a = i0; a < i1; a++)
@@ -915,26 +919,26 @@ void _greedy_meshify_voxels_in_face_direction(
 
 ogt_mesh* ogt_mesh_from_paletted_voxels_greedy(
     const ogt_voxel_meshify_context* ctx,
-    const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette) 
+    const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette)
 {
     uint32_t max_face_count   = _count_voxel_sized_faces( voxels, size_x, size_y, size_z );
     uint32_t max_vertex_count = max_face_count * 4;
     uint32_t max_index_count  = max_face_count * 6;
-    
+
     uint32_t mesh_size = sizeof(ogt_mesh) + (max_vertex_count * sizeof(ogt_mesh_vertex)) + (max_index_count * sizeof(uint32_t));
     ogt_mesh* mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
     if (!mesh)
         return NULL;
-    
+
     mesh->vertices = (ogt_mesh_vertex*)&mesh[1];
     mesh->indices  = (uint32_t*)&mesh->vertices[max_vertex_count];
     mesh->vertex_count = 0;
     mesh->index_count  = 0;
-    
+
     const int32_t k_stride_x = 1;
     const int32_t k_stride_y = size_x;
     const int32_t k_stride_z = size_x * size_y;
-    
+
     // do the +y PASS
     {
         ogt_mesh_transform transform_pos_y = _make_transform(
@@ -959,7 +963,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_greedy(
             0.0f, (float)(size_y), 0.0f, 0.0f);
 
         _greedy_meshify_voxels_in_face_direction(
-            voxels + (size_y - 1) * k_stride_y, 
+            voxels + (size_y - 1) * k_stride_y,
             palette,
             size_z, size_x, size_y,
             k_stride_z, k_stride_x,-k_stride_y,
@@ -1021,7 +1025,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_greedy(
             0.0f, 0.0f,(float)size_z, 0.0f);
 
         _greedy_meshify_voxels_in_face_direction(
-            voxels + (size_z-1) * k_stride_z, 
+            voxels + (size_z-1) * k_stride_z,
             palette,
             size_x, size_y, size_z,
             k_stride_x, k_stride_y, -k_stride_z,
@@ -1030,7 +1034,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_greedy(
     }
 
     assert( mesh->vertex_count <= max_vertex_count);
-    assert( mesh->index_count <= max_index_count);	
+    assert( mesh->index_count <= max_index_count);
     return mesh;
 }
 
@@ -1071,7 +1075,7 @@ inline bool is_vec2i_equal (const ogt_mesh_vec2i& lhs, const ogt_mesh_vec2i& rhs
 }
 
 ogt_mesh_vec2i get_cardinal_unit_vector(const ogt_mesh_vec2i& vec) {
-    assert((vec.x == 0 && vec.y != 0) || (vec.y == 0 && vec.x != 0));	// assumes this is a cardinal vector	
+    assert((vec.x == 0 && vec.y != 0) || (vec.y == 0 && vec.x != 0));	// assumes this is a cardinal vector
     if (vec.x <= -1) return make_vec2i(-1, 0);
     if (vec.x >=  1) return make_vec2i( 1, 0);
     if (vec.y <= -1) return make_vec2i( 0,-1);
@@ -1082,8 +1086,8 @@ ogt_mesh_vec2i get_cardinal_unit_vector(const ogt_mesh_vec2i& vec) {
 
 int32_t get_cardinal_vector_length(const ogt_mesh_vec2i& vec) {
     assert((vec.x == 0 && vec.y != 0) || (vec.y == 0 && vec.x != 0));
-    return vec.x == 0 ? abs(vec.y) : 
-           vec.y == 0 ? abs(vec.x) : 
+    return vec.x == 0 ? abs(vec.y) :
+           vec.y == 0 ? abs(vec.x) :
            0;
 }
 
@@ -1107,7 +1111,7 @@ bool is_point_in_triangle(const ogt_mesh_vec2i& v0,const ogt_mesh_vec2i& v1,cons
 
 uint32_t _tessellate_polygon(uint32_t* indices, const ogt_mesh_vec2i* verts, uint32_t vert_count) {
     static const uint32_t k_max_polygon_size = 16384;   // 32KB of stack!
-    uint16_t ring_indices[k_max_polygon_size]; 
+    uint16_t ring_indices[k_max_polygon_size];
     assert(vert_count >= 3 && vert_count <= k_max_polygon_size);
 
     for (uint16_t i = 0; i < vert_count; i++)
@@ -1180,7 +1184,7 @@ ogt_mesh_vec2i get_edge_bias(const ogt_mesh_vec2i& edge_vert0, const ogt_mesh_ve
     if (edge_vert0.x < edge_vert1.x) {
         assert(edge_vert0.y == edge_vert1.y);
         return make_vec2i(0, 0);
-    } 
+    }
     else if (edge_vert0.x > edge_vert1.x ) {
         assert(edge_vert0.y == edge_vert1.y);
         return make_vec2i(-1, -1);
@@ -1199,7 +1203,7 @@ ogt_mesh_vec2i get_edge_bias(const ogt_mesh_vec2i& edge_vert0, const ogt_mesh_ve
     }
 }
 
-uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mesh_vec2i& edge_vert0, const ogt_mesh_vec2i& edge_vert1, 
+uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mesh_vec2i& edge_vert0, const ogt_mesh_vec2i& edge_vert1,
                          const uint8_t* slice_colors, int32_t size_x, int32_t size_y ) {
 
     uint32_t num_tess = 0;
@@ -1226,7 +1230,7 @@ uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mes
         assert(curr_pos.x >= -1);
         if (curr_pos.x == -1)
             return 0;
-    
+
     }
     else if (edge_vert0.y > edge_vert1.y) {
         // handle top-to-bottom
@@ -1258,12 +1262,12 @@ uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mes
 //
 // We start with a simple set of verts that represents a polygon ring
 // surrounding a single voxel.
-//  
+//
 //    v1 +---+ v2
 //       | C |
 //    v0 +---+ v3
 //
-// This initial state has 4 verts on the polygon boundary which 
+// This initial state has 4 verts on the polygon boundary which
 // represents 4 edges on the polygon boundary, and the color of
 // the polygon is the voxel color.
 //
@@ -1271,15 +1275,15 @@ uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mes
 // 1. select the next edge from the polygon ring
 // 2. try extrude the edge as far as possible along its outward
 //    facing normal one voxel at a time.
-//    - stop pushing the edge outward if we'd consume an already polygonized voxel, or if the edge 
+//    - stop pushing the edge outward if we'd consume an already polygonized voxel, or if the edge
 //      would push a different color to the inside of the polygon ring.
-// 3. if the edge could be extruded, insert new points for the edge and each of its left/right 
+// 3. if the edge could be extruded, insert new points for the edge and each of its left/right
 //    neighbor edges such that color discontinuities on the outside of the edge have a vertex between them.
 // 4. if the edge could not be extruded and we have gone around the entire ring with no progress,
-//    terminate, otherwise goto 1. 
+//    terminate, otherwise goto 1.
 // 5. we now have a polygon ring that can be tessellated.
 //
-// Example 
+// Example
 // step(1):
 //
 //        (e1)
@@ -1290,16 +1294,16 @@ uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mes
 // edge1 corresponds to the next_edge_index edge within the current polygon ring.
 //
 // step(2)
-// We now try to push edge1 out as far as we can by holding v0 & v3 fixed 
+// We now try to push edge1 out as far as we can by holding v0 & v3 fixed
 // and moving v1/v2 in the direction of the edge normal:
 //
 //          ^
 //          ^
 //   v1 +-------+ v2
 //      | X | X |
-//      |   |   |          
+//      |   |   |
 //      | X | X |
-//      |   |   |          
+//      |   |   |
 //      | X | X |
 //   v0 +       + v3
 //
@@ -1311,22 +1315,22 @@ uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mes
 // Once we've finished pushing v1/v2 forward, we now check whether we have
 // to tessellate any of the edges e0, e1, e2. This is now mostly a function
 // of which colors are on the outside of the polygon boundary.
-// 
+//
 //        X   C
-//      +---*---+ 
+//      +---*---+
 //    B | X | X | D			A,B,C,D are colors along the outside of the edges.
-//      *   |   |           Here * are new points of the edges because of an 
+//      *   |   |           Here * are new points of the edges because of an
 //    A | X | X | D			exterior change of color along the edge.
-//      |   |   |          
+//      |   |   |
 //    A | X | X | D
-//      +       + 
+//      +       +
 //
 // We then insert the new edges into the polygon ring and select a new
 // edge to start extruding.
-// If we tessellated e1, then we set next_edge_index to the first child-edge 
+// If we tessellated e1, then we set next_edge_index to the first child-edge
 // on that edge again:
 //
-//         v2  
+//         v2
 //   v1 +---*---+ v3
 //      | X   X
 //   v0 *
@@ -1408,7 +1412,7 @@ int32_t _construct_polygon_for_slice(ogt_mesh_vec2i* verts, uint32_t max_verts, 
         }
 
         if (!edge1_pushed_distance) {
-            // step to the next edge 
+            // step to the next edge
             next_edge_index = (next_edge_index + 1) % vert_count;
             // bump the exit counter
             no_progress_counter++;
@@ -1427,15 +1431,15 @@ int32_t _construct_polygon_for_slice(ogt_mesh_vec2i* verts, uint32_t max_verts, 
 
             // determine if edge1 is an extrude from edge0 and if edge1 is an extrude from edge2.
             // If it is not an extrude, it is an extension.
-            bool is_e0e1_extrude = is_vec2i_equal(edge0_unitvec, edge1_unitvec); 
-            bool is_e1e2_extrude = is_vec2i_equal(edge1_unitvec, edge2_unitvec); 
+            bool is_e0e1_extrude = is_vec2i_equal(edge0_unitvec, edge1_unitvec);
+            bool is_e1e2_extrude = is_vec2i_equal(edge1_unitvec, edge2_unitvec);
 
             // (1) try tessellate edge0, edge1, edge2.
             const uint32_t k_max_tessellations = 512;
             assert(edge1_pushed_distance < k_max_tessellations);
             ogt_mesh_vec2i tess_buffer[k_max_tessellations];
             uint32_t tess_offset = 0;
-            
+
             // allocate tess_e0
             uint32_t e0_offset = tess_offset;
             if (is_e0e1_extrude) {
@@ -1474,14 +1478,14 @@ int32_t _construct_polygon_for_slice(ogt_mesh_vec2i* verts, uint32_t max_verts, 
             const ogt_mesh_vec2i* new_tess_e2 = &tess_buffer[e2_offset];
             const ogt_mesh_vec2i* new_tess_e3 = &tess_buffer[e3_offset];
 
-            // (2) insert the tessellations into the polygon ring. 
+            // (2) insert the tessellations into the polygon ring.
             // This bit is tricky as v0,v1,v2,v3 can straddle the end of the polygon ring in 4 different combinations which we handle here:
             int32_t other1_count = vert_count - 4;
             int32_t other2_count = 0;
             int32_t old_other1 = (v3 + 1) % vert_count;
             int32_t old_other2 = 0;
             int32_t new_other2 = -1;
-            int32_t new_v0, new_v1, new_v2, new_v3, new_other1; 
+            int32_t new_v0, new_v1, new_v2, new_v3, new_other1;
 
             if (v1 < v0) {
                 //   [v1][v2][v3] (.... other1 ....) [v0]
@@ -1589,9 +1593,9 @@ void _polygon_meshify_voxels_in_face_direction(
                 int32_t index_in_slice = i+(j*size_x);
                 uint8_t cell_color = voxels[i*k_stride_x + j*k_stride_y + (k+0)*k_stride_z];
 
-                // if the this cell on this slice is occluded by the corresponding cell on the next slice, we 
+                // if the this cell on this slice is occluded by the corresponding cell on the next slice, we
                 // mark this polygon as voxelized already so it doesn't get included in any polygons for the current slice.
-                // we also inherit the next slice's color to ensure the polygon flood fill inserts 
+                // we also inherit the next slice's color to ensure the polygon flood fill inserts
                 // discontinuities where necessary in order to generate a water-tight tessellation
                 // to the next slice.
                 uint8_t next_cell_color = !is_last_slice ? voxels[i * k_stride_x + j * k_stride_y + (k + 1) * k_stride_z] : 0;
@@ -1607,12 +1611,12 @@ void _polygon_meshify_voxels_in_face_direction(
         // skip to the next slice if the entire slice is empty.
         if (!num_non_empty_cells)
             continue;
-    
+
         // polygonize all voxels for this slice.
         for (int32_t j = 0; j < (int32_t)size_y; j++) {
             for (int32_t i = 0; i < (int32_t)size_x; i++) {
                 int32_t index_in_slice = i + j * size_x;
-                // this voxel does not need to be polygonized on this slice? 
+                // this voxel does not need to be polygonized on this slice?
                 // early out: empty-cell, we don't consider it.
                 uint8_t color_index = slice_colors[index_in_slice];
                 if ( color_index == 0 )
@@ -1622,17 +1626,17 @@ void _polygon_meshify_voxels_in_face_direction(
                 if (voxel_polygonized.is_set(index_in_slice))
                     continue;
 
-                // we always start polygon rasterization with any lower-left corner in (i,j) 
+                // we always start polygon rasterization with any lower-left corner in (i,j)
                 // space and fill outward from there. So skip any coords that don't match this
                 // criteria.
-                //if ((i > 0 && slice_colors[index_in_slice-1] == color_index) || 
+                //if ((i > 0 && slice_colors[index_in_slice-1] == color_index) ||
                 //	(j > 0 && slice_colors[index_in_slice-size_x] == color_index))
                 //	continue;
 
                 const uint32_t MAX_VERTS = 4096;
                 ogt_mesh_vec2i verts[MAX_VERTS];
                 uint32_t vert_count = _construct_polygon_for_slice(verts, MAX_VERTS, i, j, size_x, size_y, slice_colors, voxel_polygonized);
-                
+
                 const ogt_mesh_rgba& color = palette[color_index];
 
                 // generate the verts in the output mesh
@@ -1682,7 +1686,7 @@ void _polygon_meshify_voxels_in_face_direction(
 //          choose an edge and expand it out as far as possible, tessellating surrounding edges if neccessary, marking newly expanded cells as polygonized
 //        triangulate the output polygon.
 ogt_mesh* ogt_mesh_from_paletted_voxels_polygon(
-    const ogt_voxel_meshify_context* ctx, 
+    const ogt_voxel_meshify_context* ctx,
     const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette) {
     uint32_t max_face_count   = _count_voxel_sized_faces( voxels, size_x, size_y, size_z );
     uint32_t max_vertex_count = max_face_count * 4;
@@ -1697,11 +1701,11 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_polygon(
     mesh->indices  = (uint32_t*)&mesh->vertices[max_vertex_count];
     mesh->vertex_count = 0;
     mesh->index_count  = 0;
-    
+
     const int32_t k_stride_x = 1;
     const int32_t k_stride_y = size_x;
     const int32_t k_stride_z = size_x * size_y;
-    
+
     // do the +y PASS
     {
         ogt_mesh_transform transform_pos_y = _make_transform(
@@ -1717,7 +1721,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_polygon(
             transform_pos_y,
             mesh);
     }
-    
+
     // do the -y PASS
     {
         ogt_mesh_transform transform_neg_y = _make_transform(
@@ -1727,7 +1731,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_polygon(
             0.0f, (float)(size_y), 0.0f, 0.0f);
 
         _polygon_meshify_voxels_in_face_direction(
-            voxels + (size_y - 1) * k_stride_y, 
+            voxels + (size_y - 1) * k_stride_y,
             palette,
             size_z, size_x, size_y,
             k_stride_z, k_stride_x,-k_stride_y,
@@ -1789,7 +1793,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_polygon(
             0.0f, 0.0f,(float)size_z, 0.0f);
 
         _polygon_meshify_voxels_in_face_direction(
-            voxels + (size_z-1) * k_stride_z, 
+            voxels + (size_z-1) * k_stride_z,
             palette,
             size_x, size_y, size_z,
             k_stride_x, k_stride_y, -k_stride_z,
