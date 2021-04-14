@@ -102,10 +102,14 @@ Though rOBJ/MATT/MATL chunks are not supported for now. If there is interest, I 
 This module contains 3 routines for converting paletted voxel grid data to triangle mesh data.
 
 - ogt_mesh_from_paletted_voxels_simple: returns the most naieve mesh possible, which will be tessellated at voxel granularity. 
+![image](https://user-images.githubusercontent.com/8569715/114662155-13c6c100-9cad-11eb-9274-177ad85a82a4.png)
 
 - ogt_mesh_from_paletted_voxels_greedy: uses a greedy box-expansion pass to replce rectangular regions of voxels of the same color with a larger polygon that covers the box. It will generally produce t-junctions which can make rasterization not water-tight based on your camera/project/distances.
+![image](https://user-images.githubusercontent.com/8569715/114662173-1b866580-9cad-11eb-8671-4b0cb4d404f9.png)
 
 - ogt_mesh_from_paletted_voxels_polygon: will polygonize and triangulate connected voxels that are of the same color. The boundary of the polygon will be tessellated only to the degree that is necessary to there are tessellations at color discontinuities. Generally produces slightly more triangles that greedy meshing but it is mostly water-tight, except for a very small number of cases.
+![image](https://user-images.githubusercontent.com/8569715/114662191-20e3b000-9cad-11eb-8cd1-2e6be2a38512.png)
+
 
 More documentation and a demo will be added soon.
 
