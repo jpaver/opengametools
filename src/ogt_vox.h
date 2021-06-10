@@ -171,6 +171,61 @@
         ogt_vox_rgba color[256];      // palette of colors. use the voxel indices to lookup color from the palette.
     } ogt_vox_palette;
 
+    // Extended Material Chunk MATL types
+    enum ogt_matl_type
+    {
+        ogt_matl_type_diffuse = 0, // diffuse is default
+        ogt_matl_type_metal   = 1,
+        ogt_matl_type_glass   = 2,
+        ogt_matl_type_emit    = 3,
+        ogt_matl_type_blend   = 4,
+        ogt_matl_type_media   = 5,
+    };
+
+    // Content Flags for ogt_vox_matl values for a given material
+    static const uint32_t k_ogt_vox_matl_have_metal  = 1 << 0;
+    static const uint32_t k_ogt_vox_matl_have_rough  = 1 << 1;
+    static const uint32_t k_ogt_vox_matl_have_spec   = 1 << 2;
+    static const uint32_t k_ogt_vox_matl_have_ior    = 1 << 3;
+    static const uint32_t k_ogt_vox_matl_have_att    = 1 << 4;
+    static const uint32_t k_ogt_vox_matl_have_flux   = 1 << 5;
+    static const uint32_t k_ogt_vox_matl_have_emit   = 1 << 6;
+    static const uint32_t k_ogt_vox_matl_have_ldr    = 1 << 7;
+    static const uint32_t k_ogt_vox_matl_have_trans  = 1 << 8;
+    static const uint32_t k_ogt_vox_matl_have_alpha  = 1 << 9;
+    static const uint32_t k_ogt_vox_matl_have_d      = 1 << 10;
+    static const uint32_t k_ogt_vox_matl_have_sp     = 1 << 11;
+    static const uint32_t k_ogt_vox_matl_have_g      = 1 << 12;
+    static const uint32_t k_ogt_vox_matl_have_media  = 1 << 13;
+
+    // Extended Material Chunk MATL information
+    typedef struct ogt_vox_matl
+    {
+        uint32_t      content_flags; // set of k_ogt_vox_matl_* OR together to denote contents available
+        ogt_matl_type type;
+        float         metal;
+        float         rough;
+        float         spec;
+        float         ior;
+        float         att;
+        float         flux;
+        float         emit;
+        float         ldr;
+        float         trans;
+        float         alpha;
+        float         d;
+        float         sp;
+        float         g;
+        float         media;
+
+    } ogt_vox_matl;
+
+    // Extended Material Chunk MATL array of materials
+    typedef struct ogt_vox_matl_array
+    {
+        ogt_vox_matl matl[256];      // extended material information from Material Chunk MATL
+    } ogt_vox_matl_array;
+
     // a 3-dimensional model of voxels
     typedef struct ogt_vox_model
     {
@@ -220,6 +275,7 @@
         const ogt_vox_layer*    layers;         // array of layers. size is num_layers
         const ogt_vox_group*    groups;         // array of groups. size is num_groups
         ogt_vox_palette         palette;        // the palette for this scene
+        ogt_vox_matl_array      materials;      // the extended materials for this scene
     } ogt_vox_scene;
 
     // allocate memory function interface. pass in size, and get a pointer to memory with at least that size available.
@@ -793,6 +849,7 @@
         _vox_array<ogt_vox_group>    groups;
         _vox_array<uint32_t>         child_ids;
         ogt_vox_palette              palette;
+        ogt_vox_matl_array           materials;
         _vox_dictionary              dict;
         uint32_t                     size_x = 0;
         uint32_t                     size_y = 0;
@@ -817,6 +874,9 @@
 
         // copy the default palette into the scene. It may get overwritten by a palette chunk later
         memcpy(&palette, k_default_vox_palette, sizeof(ogt_vox_palette));
+
+        // zero initialize materials (this sets valid defaults)
+        memset(&materials, 0, sizeof(materials));
 
         // load and validate fileheader and file version.
         uint32_t file_header;
@@ -1054,6 +1114,107 @@
                 }
                 // we don't handle MATL/MATT/rOBJ or any other chunks for now, so we just skip the chunk payload.
                 case CHUNK_ID_MATL:
+                {
+                    int32_t material_id = 0;
+                    _vox_file_read(fp, &material_id, sizeof(material_id));
+                    material_id = material_id; // we use 0 based array of materials
+                    _vox_file_read_dict(&dict, fp);
+                    if(material_id>255) {
+                        break;
+                    }
+                    const char* type_string = _vox_dict_get_value_as_string(&dict, "_type", NULL);
+                    if (type_string) {
+                        if (0 == _vox_strcmp(type_string,"_diffuse")) {
+                            materials.matl[material_id].type = ogt_matl_type_diffuse;
+                        }
+                        else if (0 == _vox_strcmp(type_string,"_metal")) {
+                            materials.matl[material_id].type = ogt_matl_type_metal;
+                        }
+                        else if (0 == _vox_strcmp(type_string,"_glass")) {
+                            materials.matl[material_id].type = ogt_matl_type_glass;
+                        }
+                        else if (0 == _vox_strcmp(type_string,"_emit")) {
+                            materials.matl[material_id].type = ogt_matl_type_emit;
+                        }
+                        else if (0 == _vox_strcmp(type_string,"_blend")) {
+                            materials.matl[material_id].type = ogt_matl_type_blend;
+                        }
+                        else if (0 == _vox_strcmp(type_string,"_media")) {
+                            materials.matl[material_id].type = ogt_matl_type_media;
+                        }
+                    }
+                    const char* metal_string = _vox_dict_get_value_as_string(&dict, "_metal", NULL);
+                    if (metal_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_metal;
+                        materials.matl[material_id].metal = (float)atof(metal_string);
+                    }
+                    const char* rough_string = _vox_dict_get_value_as_string(&dict, "_rough", NULL);
+                    if (rough_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_rough;
+                        materials.matl[material_id].rough = (float)atof(rough_string);
+                    }
+                    const char* spec_string = _vox_dict_get_value_as_string(&dict, "_spec", NULL);
+                    if (spec_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_spec;
+                        materials.matl[material_id].spec = (float)atof(spec_string);
+                    }
+                    const char* ior_string = _vox_dict_get_value_as_string(&dict, "_ior", NULL);
+                    if (ior_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_ior;
+                        materials.matl[material_id].ior = (float)atof(ior_string);
+                    }
+                    const char* att_string = _vox_dict_get_value_as_string(&dict, "_att", NULL);
+                    if (att_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_att;
+                        materials.matl[material_id].att = (float)atof(att_string);
+                    }
+                    const char* flux_string = _vox_dict_get_value_as_string(&dict, "_flux", NULL);
+                    if (flux_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_flux;
+                        materials.matl[material_id].flux = (float)atof(flux_string);
+                    }
+                    const char* emit_string = _vox_dict_get_value_as_string(&dict, "_emit", NULL);
+                    if (emit_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_emit;
+                        materials.matl[material_id].emit = (float)atof(emit_string);
+                    }
+                    const char* ldr_string = _vox_dict_get_value_as_string(&dict, "_ldr", NULL);
+                    if (ldr_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_ldr;
+                        materials.matl[material_id].ldr = (float)atof(ldr_string);
+                    }
+                    const char* trans_string = _vox_dict_get_value_as_string(&dict, "_trans", NULL);
+                    if (trans_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_trans;
+                        materials.matl[material_id].trans = (float)atof(trans_string);
+                    }
+                    const char* alpha_string = _vox_dict_get_value_as_string(&dict, "_alpha", NULL);
+                    if (alpha_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_alpha;
+                        materials.matl[material_id].alpha = (float)atof(alpha_string);
+                    }
+                    const char* d_string = _vox_dict_get_value_as_string(&dict, "_d", NULL);
+                    if (d_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_d;
+                        materials.matl[material_id].d = (float)atof(d_string);
+                    }
+                    const char* sp_string = _vox_dict_get_value_as_string(&dict, "_sp", NULL);
+                    if (sp_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_sp;
+                        materials.matl[material_id].sp = (float)atof(sp_string);
+                    }
+                    const char* g_string = _vox_dict_get_value_as_string(&dict, "_g", NULL);
+                    if (g_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_g;
+                        materials.matl[material_id].g = (float)atof(g_string);
+                    }
+                    const char* media_string = _vox_dict_get_value_as_string(&dict, "_media", NULL);
+                    if (media_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_media;
+                        materials.matl[material_id].media = (float)atof(media_string);
+                    }
+                    break;
+                }
                 case CHUNK_ID_MATT:
                 case CHUNK_ID_rOBJ:
                 default:
@@ -1265,6 +1426,9 @@
 
             // copy the palette.
             scene->palette = palette;
+
+            // copy the materials.
+            scene->materials = materials;
         }
         return scene;
     }
