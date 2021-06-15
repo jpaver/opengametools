@@ -1117,11 +1117,8 @@
                 {
                     int32_t material_id = 0;
                     _vox_file_read(fp, &material_id, sizeof(material_id));
-                    material_id = material_id; // we use 0 based array of materials
+                    material_id = material_id & 0xFF; // incoming material 256 is material 0
                     _vox_file_read_dict(&dict, fp);
-                    if(material_id>255) {
-                        break;
-                    }
                     const char* type_string = _vox_dict_get_value_as_string(&dict, "_type", NULL);
                     if (type_string) {
                         if (0 == _vox_strcmp(type_string,"_diffuse")) {
@@ -1291,6 +1288,15 @@
                 uint32_t remapped_index = (index_map[i] + 255) & 0xFF;
                 palette.color[i] = old_palette.color[remapped_index];
             }
+
+            // reorder materials
+            ogt_vox_matl_array old_materials = materials;
+            for (uint32_t i = 0; i < 256; i++) {
+                uint32_t remapped_i = (i + 255) & 0xFF;
+                uint32_t remapped_index = index_map[remapped_i];
+                materials.matl[i] = old_materials.matl[remapped_index];
+            }
+
 
             // ensure that all models are remapped so they are using display order palette indices.
             for (uint32_t i = 0; i < model_ptrs.size(); i++) {
