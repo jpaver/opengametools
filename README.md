@@ -95,7 +95,9 @@ The reader, writer and merge functionaliy supports the most relevant chunks as d
 - [MagicaVoxel-file-format-vox.txt](https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox.txt)
 - [MagicaVoxel-file-format-vox-extension.txt](https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox-extension.txt)
 
-Though rOBJ/MATT/MATL chunks are not supported for now. If there is interest, I can look into it.
+MATL chunks are only supporting for loading APIs, but is expected that saving and merging will come in a later change. CAVEAT: loading of MATL chunks are most accurate when written by recent Magicavoxel versions (0.99.6.2 and 0.99.6.3 at time of writing). Chunks written by earlier versions may not be decoded accurately.
+
+rOBJ/MATT chunks are not supported in any capacity for now. If there is interest, do let us know in the Issues section.
 
 ## ogt_voxel_meshify: converts voxel grid data to triangle mesh data
 
