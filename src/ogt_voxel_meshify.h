@@ -134,6 +134,9 @@ typedef void  (*ogt_voxel_meshify_free_func)(void* ptr, void* user_data);
 // stream function can receive a batch of triangles for each voxel processed by ogt_stream_from_paletted_voxels_simple. (i,j,k) 
 typedef void (*ogt_voxel_simple_stream_func)(uint32_t x, uint32_t y, uint32_t z, const ogt_mesh_vertex* vertices, uint32_t vertex_count, const uint32_t* indices, uint32_t index_count, void* user_data);
 
+// filter function which can be used by ogt_stream_from_paletted_voxels_simple to omit tessellation of specific voxels.
+typedef int (*ogt_voxel_simple_filter_func)(uint32_t x, uint32_t y, uint32_t z, uint8_t voxel, void* user_data);
+
 // a context that allows you to override various internal operations of the below api functions.
 struct ogt_voxel_meshify_context
 {
@@ -170,7 +173,7 @@ void      ogt_mesh_smooth_normals(const ogt_voxel_meshify_context* ctx, ogt_mesh
 void      ogt_mesh_destroy(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh );
     
 // The simple stream function will stream geometry for the specified voxel field, to the specified stream function, which will be invoked on each voxel that requires geometry. 
-void     ogt_stream_from_paletted_voxels_simple(const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette, ogt_voxel_simple_stream_func stream_func, void* stream_func_data);
+void     ogt_stream_from_paletted_voxels_simple(const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette, ogt_voxel_simple_stream_func stream_func, void* stream_func_data, ogt_voxel_simple_filter_func, void* filter_func_data);
 
 
 #endif // OGT_VOXEL_MESHIFY_H__
@@ -577,7 +580,7 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
     mesh->vertex_count = 0;
     mesh->index_count  = 0;
     
-    ogt_stream_from_paletted_voxels_simple(voxels, size_x, size_y, size_z, palette, _streaming_add_to_mesh, mesh);
+    ogt_stream_from_paletted_voxels_simple(voxels, size_x, size_y, size_z, palette, _streaming_add_to_mesh, mesh, NULL, NULL);
     
     assert( mesh->vertex_count == max_vertex_count);
     assert( mesh->index_count == max_index_count);	
@@ -587,7 +590,8 @@ ogt_mesh* ogt_mesh_from_paletted_voxels_simple(
 // streams geometry for each voxel at a time to a specified user function.
 void ogt_stream_from_paletted_voxels_simple(
     const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, const ogt_mesh_rgba* palette,
-    ogt_voxel_simple_stream_func stream_func, void* stream_func_data) 
+    ogt_voxel_simple_stream_func stream_func, void* stream_func_data,
+    ogt_voxel_simple_filter_func filter_func, void* filter_func_data) 
 {
     assert(stream_func);
     const int32_t k_stride_x = 1;
@@ -613,6 +617,10 @@ void ogt_stream_from_paletted_voxels_simple(
             {
                 // current voxel slot is empty? skip it.
                 if (current_voxel[0] == 0)
+                    continue;
+
+                // if we have a filter_func, does it indicate that this voxel should be omitted?
+                if (NULL != filter_func && 0 == filter_func(i, j, k, current_voxel[0], filter_func_data))
                     continue;
 
                 ogt_mesh_rgba color = palette[ current_voxel[0]];
