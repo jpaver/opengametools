@@ -1902,7 +1902,7 @@
                 best_index = color_index;
             }
         }
-        assert(best_score < UINT32_MAX); // this might indicate a completely degenerate palette.
+        assert(best_score < INT32_MAX); // this might indicate a completely degenerate palette.
         return best_index;
     }
 
