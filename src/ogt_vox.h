@@ -870,7 +870,7 @@
         // rather than pointers into data-structures that grow, and still allow an index of 0 
         // to means invalid
         string_data.push_back('X');
-        child_ids.push_back(-1);
+        child_ids.push_back(UINT32_MAX);
 
         // copy the default palette into the scene. It may get overwritten by a palette chunk later
         memcpy(&palette, k_default_vox_palette, sizeof(ogt_vox_palette));
@@ -1474,11 +1474,11 @@
 
     // the vector should be a unit vector aligned along one of the cardinal directions exactly. eg. (1,0,0) or (0, 0, -1)
        // this function returns the non-zero column index in out_index and the returns whether that entry is negative.
-    static bool _vox_get_vec3_rotation_bits(const vec3& vec, uint32_t& out_index) {
+    static bool _vox_get_vec3_rotation_bits(const vec3& vec, uint8_t& out_index) {
         const float* f = &vec.x;
         out_index = 3;
         bool is_negative = false;
-        for (uint32_t i = 0; i < 3; i++) {
+        for (uint8_t i = 0; i < 3; i++) {
             if (f[i] == 1.0f || f[i] == -1.0f) {
                 out_index = i;
                 is_negative = f[i] < 0.0f ? true : false;
@@ -1496,7 +1496,7 @@
         vec3 row0 = vec3_make(transform->m00, transform->m10, transform->m20);
         vec3 row1 = vec3_make(transform->m01, transform->m11, transform->m21);
         vec3 row2 = vec3_make(transform->m02, transform->m12, transform->m22);
-        uint32_t row0_index = 3, row1_index = 3, row2_index = 3;
+        uint8_t row0_index = 3, row1_index = 3, row2_index = 3;
         bool row0_negative = _vox_get_vec3_rotation_bits(row0, row0_index);
         bool row1_negative = _vox_get_vec3_rotation_bits(row1, row1_index);
         bool row2_negative = _vox_get_vec3_rotation_bits(row2, row2_index);
