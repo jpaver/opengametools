@@ -721,7 +721,7 @@
         union {
             // used only when node_type == k_nodetype_transform
             struct {
-                char              name[64];    // max name size is 64
+                char              name[65];    // max name size is 64 plus 1 for null terminator
                 ogt_vox_transform transform;
                 uint32_t          child_node_id;
                 uint32_t          layer_id;
@@ -973,7 +973,7 @@
                     // Parse the node dictionary, which can contain:
                     //   _name:   string
                     //   _hidden: 0/1
-                    char node_name[64];
+                    char node_name[65];
                     bool hidden = false;
                     node_name[0] = 0;
                     {
@@ -1550,8 +1550,8 @@
         const char* hidden_string = hidden ? "1" : NULL;
         const char* t_string = NULL;
         const char* r_string = NULL;
-        char t_string_buf[64];
-        char r_string_buf[64];
+        char t_string_buf[65];
+        char r_string_buf[65];
         t_string_buf[0] = 0;
         r_string_buf[0] = 0;
         if (transform != NULL) {
