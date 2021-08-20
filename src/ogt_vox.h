@@ -415,19 +415,27 @@
         uint32_t        offset;       // current offset in the buffer data.
     };
 
+    static uint32_t _vox_file_bytes_remaining(const _vox_file* fp) {
+        if (fp->offset < fp->buffer_size) {
+            return fp->buffer_size - fp->offset;
+        } else {
+            return 0;
+        }
+    }
+
     static bool _vox_file_read(_vox_file* fp, void* data, uint32_t data_size) {
-        size_t data_to_read = _vox_min(fp->buffer_size - fp->offset, data_size);
+        size_t data_to_read = _vox_min(_vox_file_bytes_remaining(fp), data_size);
         memcpy(data, &fp->buffer[fp->offset], data_to_read);
         fp->offset += data_size;
         return data_to_read == data_size;
     }
 
     static void _vox_file_seek_forwards(_vox_file* fp, uint32_t offset) {
-        fp->offset += offset;
+        fp->offset += _vox_min(offset, _vox_file_bytes_remaining(fp));
     }
 
     static bool _vox_file_eof(const _vox_file* fp) {
-        return fp->offset >= fp->buffer_size;
+        return _vox_file_bytes_remaining(fp) == 0;
     }
 
     static const void* _vox_file_data_pointer(const _vox_file* fp) {
@@ -610,25 +618,29 @@
         for (uint32_t i = 0; i < num_pairs_to_read; i++) {
             // get the size of the key string
             uint32_t key_string_size = 0;
-            _vox_file_read(fp, &key_string_size, sizeof(uint32_t));
+            if (!_vox_file_read(fp, &key_string_size, sizeof(uint32_t)))
+                return false;
             // allocate space for the key, and read it in.
             if (dict->buffer_mem_used + key_string_size > k_vox_max_dict_buffer_size)
                 return false;
             char* key = &dict->buffer[dict->buffer_mem_used];
             dict->buffer_mem_used += key_string_size + 1;    // + 1 for zero terminator
-            _vox_file_read(fp, key, key_string_size);
+            if (!_vox_file_read(fp, key, key_string_size))
+                return false;
             key[key_string_size] = 0;    // zero-terminate
             assert(_vox_strlen(key) == key_string_size);    // sanity check
 
             // get the size of the value string
             uint32_t value_string_size = 0;
-            _vox_file_read(fp, &value_string_size, sizeof(uint32_t));
+            if (!_vox_file_read(fp, &value_string_size, sizeof(uint32_t)))
+                return false;
             // allocate space for the value, and read it in.
             if (dict->buffer_mem_used + value_string_size > k_vox_max_dict_buffer_size)
-                return (false);
+                return false;
             char* value = &dict->buffer[dict->buffer_mem_used];
             dict->buffer_mem_used += value_string_size + 1;    // + 1 for zero terminator
-            _vox_file_read(fp, value, value_string_size);
+            if (!_vox_file_read(fp, value, value_string_size))
+                return false;
             value[value_string_size] = 0;    // zero-terminate
             assert(_vox_strlen(value) == value_string_size);    // sanity check
             // now assign it in the dictionary
@@ -887,7 +899,7 @@
             return NULL;
 
         // parse chunks until we reach the end of the file/buffer
-        while (!_vox_file_eof(fp))
+        while (_vox_file_bytes_remaining(fp) >= sizeof(uint32_t) * 3)
         {
             // read the fields common to all chunks
             uint32_t chunk_id         = 0;
@@ -942,7 +954,8 @@
 
                         // read this many voxels and store it in voxel data.
                         const uint8_t * packed_voxel_data = (const uint8_t*)_vox_file_data_pointer(fp);
-                        for (uint32_t i = 0; i < num_voxels_in_chunk; i++) {
+                        const uint32_t voxels_to_read = _vox_min(_vox_file_bytes_remaining(fp) / 4, num_voxels_in_chunk);
+                        for (uint32_t i = 0; i < voxels_to_read; i++) {
                             uint8_t x = packed_voxel_data[i * 4 + 0];
                             uint8_t y = packed_voxel_data[i * 4 + 1];
                             uint8_t z = packed_voxel_data[i * 4 + 2];
