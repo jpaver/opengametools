@@ -891,8 +891,8 @@
         memset(&materials, 0, sizeof(materials));
 
         // load and validate fileheader and file version.
-        uint32_t file_header;
-        uint32_t file_version;
+        uint32_t file_header = 0;
+        uint32_t file_version = 0;
         _vox_file_read(fp, &file_header, sizeof(uint32_t));
         _vox_file_read(fp, &file_version, sizeof(uint32_t));
         if (file_header != CHUNK_ID_VOX_ || file_version != 150)
@@ -980,7 +980,7 @@
                 }
                 case CHUNK_ID_nTRN:
                 {
-                    uint32_t node_id;
+                    uint32_t node_id = 0;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
 
                     // Parse the node dictionary, which can contain:
@@ -1002,7 +1002,7 @@
 
 
                     // get other properties.
-                    uint32_t child_node_id, reserved_id, layer_id, num_frames;
+                    uint32_t child_node_id = 0, reserved_id = 0, layer_id = 0, num_frames = 0;
                     _vox_file_read(fp, &child_node_id, sizeof(child_node_id));
                     _vox_file_read(fp, &reserved_id,   sizeof(reserved_id));
                     _vox_file_read(fp, &layer_id,      sizeof(layer_id));
@@ -1037,7 +1037,7 @@
                 }
                 case CHUNK_ID_nGRP:
                 {
-                    uint32_t node_id;
+                    uint32_t node_id = 0;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
 
                     // parse the node dictionary - data is unused.
@@ -1067,7 +1067,7 @@
                 }
                 case CHUNK_ID_nSHP:
                 {
-                    uint32_t node_id;
+                    uint32_t node_id = 0;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
 
                     // setup the shape node 
