@@ -434,10 +434,6 @@
         fp->offset += _vox_min(offset, _vox_file_bytes_remaining(fp));
     }
 
-    static bool _vox_file_eof(const _vox_file* fp) {
-        return _vox_file_bytes_remaining(fp) == 0;
-    }
-
     static const void* _vox_file_data_pointer(const _vox_file* fp) {
         return &fp->buffer[fp->offset];
     }
