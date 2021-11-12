@@ -114,6 +114,7 @@ struct ogt_mesh_vertex
     ogt_mesh_vec3  pos;
     ogt_mesh_vec3  normal;
     ogt_mesh_rgba  color;
+    uint32_t palette_index;
 };
 
 // a mesh that contains an indexed triangle list of vertices
@@ -307,16 +308,17 @@ static inline ogt_mesh_vec3 _normalize3(const ogt_mesh_vec3 & a) {
     return ret;
 }
 
-static inline ogt_mesh_vertex _mesh_make_vertex(const ogt_mesh_vec3& pos, const ogt_mesh_vec3& normal, const ogt_mesh_rgba color ) {
+static inline ogt_mesh_vertex _mesh_make_vertex(const ogt_mesh_vec3& pos, const ogt_mesh_vec3& normal, const ogt_mesh_rgba color, uint32_t palette_index) {
     ogt_mesh_vertex ret;
     ret.pos    = pos;
     ret.normal = normal;
     ret.color  = color;
+    ret.palette_index = palette_index;
     return ret;
 }
 
-static inline ogt_mesh_vertex _mesh_make_vertex(float pos_x, float pos_y, float pos_z, float normal_x, float normal_y, float normal_z, ogt_mesh_rgba color ) {
-    return _mesh_make_vertex(_make_vec3(pos_x, pos_y, pos_z), _make_vec3(normal_x, normal_y, normal_z), color);
+static inline ogt_mesh_vertex _mesh_make_vertex(float pos_x, float pos_y, float pos_z, float normal_x, float normal_y, float normal_z, ogt_mesh_rgba color, uint32_t palette_index) {
+    return _mesh_make_vertex(_make_vec3(pos_x, pos_y, pos_z), _make_vec3(normal_x, normal_y, normal_z), color, palette_index);
 }
 
 // counts the number of voxel sized faces that are needed for this voxel grid.
@@ -643,10 +645,10 @@ void ogt_stream_from_paletted_voxels_simple(
                 // -X direction face
                 if (neg_x)
                 {
-                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, -1.0f, 0.0f, 0.0f, color );
-                    current_vertex[1] = _mesh_make_vertex( min_x, max_y, min_z, -1.0f, 0.0f, 0.0f, color );
-                    current_vertex[2] = _mesh_make_vertex( min_x, max_y, max_z, -1.0f, 0.0f, 0.0f, color );
-                    current_vertex[3] = _mesh_make_vertex( min_x, min_y, max_z, -1.0f, 0.0f, 0.0f, color );
+                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, -1.0f, 0.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[1] = _mesh_make_vertex( min_x, max_y, min_z, -1.0f, 0.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[2] = _mesh_make_vertex( min_x, max_y, max_z, -1.0f, 0.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[3] = _mesh_make_vertex( min_x, min_y, max_z, -1.0f, 0.0f, 0.0f, color, current_voxel[0] );
                     current_index[0] = total_vertex_count + 2;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 0;
@@ -662,10 +664,10 @@ void ogt_stream_from_paletted_voxels_simple(
                 // +X direction face
                 if (pos_x)
                 {
-                    current_vertex[0] = _mesh_make_vertex( max_x, min_y, min_z, 1.0f, 0.0f, 0.0f, color );
-                    current_vertex[1] = _mesh_make_vertex( max_x, max_y, min_z, 1.0f, 0.0f, 0.0f, color );
-                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 1.0f, 0.0f, 0.0f, color );
-                    current_vertex[3] = _mesh_make_vertex( max_x, min_y, max_z, 1.0f, 0.0f, 0.0f, color );
+                    current_vertex[0] = _mesh_make_vertex( max_x, min_y, min_z, 1.0f, 0.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[1] = _mesh_make_vertex( max_x, max_y, min_z, 1.0f, 0.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 1.0f, 0.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[3] = _mesh_make_vertex( max_x, min_y, max_z, 1.0f, 0.0f, 0.0f, color, current_voxel[0] );
                     current_index[0] = total_vertex_count + 0;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 2;
@@ -681,10 +683,10 @@ void ogt_stream_from_paletted_voxels_simple(
                 // -Y direction face
                 if (neg_y)
                 {
-                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color );
-                    current_vertex[1] = _mesh_make_vertex( max_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color );
-                    current_vertex[2] = _mesh_make_vertex( max_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color );
-                    current_vertex[3] = _mesh_make_vertex( min_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color );
+                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[1] = _mesh_make_vertex( max_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[2] = _mesh_make_vertex( max_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[3] = _mesh_make_vertex( min_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color, current_voxel[0] );
                     current_index[0] = total_vertex_count + 0;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 2;
@@ -699,10 +701,10 @@ void ogt_stream_from_paletted_voxels_simple(
                 // +Y direction face
                 if (pos_y)
                 {
-                    current_vertex[0] = _mesh_make_vertex( min_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color );
-                    current_vertex[1] = _mesh_make_vertex( max_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color );
-                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color );
-                    current_vertex[3] = _mesh_make_vertex( min_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color );
+                    current_vertex[0] = _mesh_make_vertex( min_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[1] = _mesh_make_vertex( max_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color, current_voxel[0] );
+                    current_vertex[3] = _mesh_make_vertex( min_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color, current_voxel[0] );
                     current_index[0] = total_vertex_count + 2;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 0;
@@ -717,10 +719,10 @@ void ogt_stream_from_paletted_voxels_simple(
                 // -Z direction face
                 if (neg_z)
                 {
-                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color );
-                    current_vertex[1] = _mesh_make_vertex( max_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color );
-                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color );
-                    current_vertex[3] = _mesh_make_vertex( min_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color );
+                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color, current_voxel[0] );
+                    current_vertex[1] = _mesh_make_vertex( max_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color, current_voxel[0] );
+                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color, current_voxel[0] );
+                    current_vertex[3] = _mesh_make_vertex( min_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color, current_voxel[0] );
                     current_index[0] = total_vertex_count + 2;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 0;
@@ -735,10 +737,10 @@ void ogt_stream_from_paletted_voxels_simple(
                 // +Z direction face
                 if (pos_z)
                 {
-                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color );
-                    current_vertex[1] = _mesh_make_vertex( max_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color );
-                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color );
-                    current_vertex[3] = _mesh_make_vertex( min_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color );
+                    current_vertex[0] = _mesh_make_vertex( min_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color, current_voxel[0] );
+                    current_vertex[1] = _mesh_make_vertex( max_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color, current_voxel[0] );
+                    current_vertex[2] = _mesh_make_vertex( max_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color, current_voxel[0] );
+                    current_vertex[3] = _mesh_make_vertex( min_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color, current_voxel[0] );
                     current_index[0] = total_vertex_count + 0;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 2;
@@ -872,10 +874,10 @@ void _greedy_meshify_voxels_in_face_direction(
                 ogt_mesh_rgba color = palette[color_index];
 
                 // write the verts for this face
-                vertex_data[0] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, min_y, max_z)), normal, color);
-                vertex_data[1] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, min_y, max_z)), normal, color);
-                vertex_data[2] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, max_y, max_z)), normal, color);
-                vertex_data[3] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, max_y, max_z)), normal, color);
+                vertex_data[0] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, min_y, max_z)), normal, color, color_index);
+                vertex_data[1] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, min_y, max_z)), normal, color, color_index);
+                vertex_data[2] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, max_y, max_z)), normal, color, color_index);
+                vertex_data[3] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, max_y, max_z)), normal, color, color_index);
 
                 // reserve the index order to ensure parity/winding is still correct.
                 if (is_parity_flipped) {
@@ -1634,7 +1636,7 @@ void _polygon_meshify_voxels_in_face_direction(
                 // generate the verts in the output mesh
                 uint32_t base_vertex_index = mesh->vertex_count;
                 for (uint32_t i = 0; i < vert_count; i++) {
-                    mesh->vertices[mesh->vertex_count++] = _mesh_make_vertex(_transform_point(transform, _make_vec3((float)verts[i].x,   (float)verts[i].y,   (float)(k+1))), normal, color);
+                    mesh->vertices[mesh->vertex_count++] = _mesh_make_vertex(_transform_point(transform, _make_vec3((float)verts[i].x,   (float)verts[i].y,   (float)(k+1))), normal, color, color_index);
                 }
 
                 // generate the indices in the output mesh.
