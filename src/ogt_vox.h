@@ -125,15 +125,15 @@
     typedef unsigned char uint8_t;
     typedef signed int    int32_t;
     typedef unsigned int  uint32_t;
-	#ifndef UINT32_MAX
-		#define UINT32_MAX	((uint32_t)0xFFFFFFFF)
-	#endif
-	#ifndef INT32_MAX
-		#define INT32_MAX	((int32_t)0x7FFFFFFF)
-	#endif
-	#ifndef UINT8_MAX
-		#define UINT8_MAX	((uint8_t)0xFF)
-	#endif
+    #ifndef UINT32_MAX
+        #define UINT32_MAX	((uint32_t)0xFFFFFFFF)
+    #endif
+    #ifndef INT32_MAX
+        #define INT32_MAX	((int32_t)0x7FFFFFFF)
+    #endif
+    #ifndef UINT8_MAX
+        #define UINT8_MAX	((uint8_t)0xFF)
+    #endif
 #elif defined(_MSC_VER)
     // general VS*
     #include <inttypes.h>
@@ -674,10 +674,10 @@
 
     // lookup table for _vox_make_transform_from_dict_strings
     static const vec3 k_vectors[4] = {
-	vec3_make(1.0f, 0.0f, 0.0f),
-	vec3_make(0.0f, 1.0f, 0.0f),
-	vec3_make(0.0f, 0.0f, 1.0f),
-	vec3_make(0.0f, 0.0f, 0.0f)    // invalid!
+        vec3_make(1.0f, 0.0f, 0.0f),
+        vec3_make(0.0f, 1.0f, 0.0f),
+        vec3_make(0.0f, 0.0f, 1.0f),
+        vec3_make(0.0f, 0.0f, 0.0f)    // invalid!
     };
 
     // lookup table for _vox_make_transform_from_dict_strings
