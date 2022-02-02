@@ -232,6 +232,9 @@
         uint32_t       size_x;        // number of voxels in the local x dimension
         uint32_t       size_y;        // number of voxels in the local y dimension
         uint32_t       size_z;        // number of voxels in the local z dimension
+        float          pivot_x;       // the pivot when applying the ogt_vox_transform data
+        float          pivot_y;       // the pivot when applying the ogt_vox_transform data
+        float          pivot_z;       // the pivot when applying the ogt_vox_transform data
         uint32_t       voxel_hash;    // hash of the content of the grid.
         const uint8_t* voxel_data;    // grid of voxel data comprising color indices in x -> y -> z order. a color index of 0 means empty, all other indices mean solid and can be used to index the scene's palette to obtain the color for the voxel.
     } ogt_vox_model;
@@ -305,6 +308,9 @@
     // writes the scene to a new buffer and returns the buffer size. free the buffer with ogt_vox_free
     uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t* buffer_size);
 
+    // calculate the final position for the 3 input coordinates
+    void ogt_vox_apply_transform(const ogt_vox_transform *transform, float pivot_x, float pivot_y, float pivot_z, int i, int j, int k, int *out_i, int *out_j, int *out_k);
+
     // merges the specified scenes together to create a bigger scene. Merged scene can be destroyed using ogt_vox_destroy_scene
     // If you require specific colors in the merged scene palette, provide up to and including 255 of them via required_colors/required_color_count.
     ogt_vox_scene* ogt_vox_merge_scenes(const ogt_vox_scene** scenes, uint32_t scene_count, const ogt_vox_rgba* required_colors, const uint32_t required_color_count);
@@ -322,7 +328,8 @@
     #include <stdlib.h>
     #include <string.h>
     #include <stdio.h>
-    
+    #include <math.h>
+
     // MAKE_VOX_CHUNK_ID: used to construct a literal to describe a chunk in a .vox file.
     #define MAKE_VOX_CHUNK_ID(c0,c1,c2,c3)     ( (c0<<0) | (c1<<8) | (c2<<16) | (c3<<24) )
 
@@ -591,6 +598,15 @@
         r.m32 = (a.m30 * b.m02) + (a.m31 * b.m12) + (a.m32 * b.m22) + (a.m33 * b.m32);
         r.m33 = (a.m30 * b.m03) + (a.m31 * b.m13) + (a.m32 * b.m23) + (a.m33 * b.m33);
         return r;
+    }
+
+    void ogt_vox_apply_transform(const ogt_vox_transform *transform, float pivot_x, float pivot_y, float pivot_z, int i, int j, int k, int *out_i, int *out_j, int *out_k) {
+        const float vi = ((float)i + 0.5f) - pivot_x;
+        const float vj = ((float)j + 0.5f) - pivot_y;
+        const float vk = ((float)k + 0.5f) - pivot_z;
+        *out_i = (int)floor(transform->m00 * vi + transform->m01 * vj + transform->m02 * vk + transform->m03);
+        *out_j = (int)floor(transform->m10 * vi + transform->m11 * vj + transform->m12 * vk + transform->m13);
+        *out_k = (int)floor(transform->m20 * vi + transform->m21 * vj + transform->m22 * vk + transform->m23);
     }
 
     // dictionary utilities
@@ -941,6 +957,9 @@
                         model->size_x = size_x;
                         model->size_y = size_y;
                         model->size_z = size_z;
+                        model->pivot_x = floor((float)size_x / 2.0f);
+                        model->pivot_y = floor((float)size_y / 2.0f);
+                        model->pivot_z = floor((float)size_z / 2.0f);
                         model->voxel_data = voxel_data;
 
                         // setup some strides for computing voxel index based on x/y/z
