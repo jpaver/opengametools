@@ -7,8 +7,9 @@ So far it contains:
 - [ogt_voxel_meshify.h](https://github.com/jpaver/opengametools/blob/master/src/ogt_voxel_meshify.h) a few routines to convert voxel grid data to triangle mesh.
 - [vox2fbx.cpp](https://github.com/jpaver/opengametools/blob/master/apps/vox2fbx.cpp) an application to extract models from .vox and save them to ascii fbx
 - [voxseparate.cpp](https://github.com/jpaver/opengametools/blob/master/apps/voxseparate.cpp) an application to extract models from .vox and save them to separate .vox files.
+- [voxmerge.cpp](https://github.com/jpaver/opengametools/blob/master/apps/voxmerge.cpp) an application to merge multiple .vox files into a single .vox file.
 
-Please consider contributing fixes, extensions, bug reports or feature requests to this project. If you have example scenes that fail to load or save correctly, feel free to send them to me and I'd be happy to investigate and make fixes for you.
+Please consider contributing fixes, extensions, bug reports or feature requests to this project. If you have example scenes that fail to load or save correctly, or have additional issues, feel free to file an issue on github and I'd be happy to investigate and make fixes when I have the time.
 
 See [CONTRIBUTING.md](https://github.com/jpaver/opengametools/blob/master/CONTRIBUTING.md) for more details.
 
@@ -132,10 +133,16 @@ Provide input .vox files on the command line, and output files will be written o
 
 It can also be used from windows explorer by dragging-and-drop your .vox files onto it, and it will produce an output vox file for each model in each .vox file.
 
+## voxmerge: Tool for merging multiple Magicavoxel .vox files into a single .vox file.
+	
+Provide an output filename, and one-or-more multiple input .vox files and the merged scene will be written out. The output file will do a basic best fit of palettes colors across all input .vox files and will emit only the used colors from all input vox files into the output file.
+	
 ## Projects using open game tools
 
- - https://wiki.voxelplugin.com/Main_Page ( https://github.com/Phyronnaz/VoxelPlugin )
- - https://voxelmax.com/
+ - UE Voxel plugin [ https://wiki.voxelplugin.com/Main_Page ] ( code: https://github.com/Phyronnaz/VoxelPlugin )
+ - Voxelmax [ https://voxelmax.com/ ] by http://www.twitter.com/ndreca_com
+ - Avoyd [https://www.enkisoftware.com/] by Doug Binks
+ - Vengi engine [ https://github.com/mgerhardy/vengi ] by Martin Gerhardy
  - I am also using it in my own game project. Will share details when I'm ready to decloak.
 
 ## Acknowledgements
