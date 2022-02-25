@@ -116,6 +116,60 @@
         const ogt_vox_scene* scenes[] = {scene1, scene2, scene3};
         // palette.color[0] is always the empty color which is why we pass 255 colors starting from index 1 only:
         ogt_vox_scene* merged_scene = ogt_vox_merge_scenes(scenes, 3, &palette.color[1], 255);
+
+    EXPLANATION OF MODEL PIVOTS
+
+    If a voxel model grid has dimension size.xyz in terms of number of voxels, the centre pivot
+    for that model is located at floor( size.xyz / 2).
+
+    eg. for a 3x4x1 voxel model, the pivot would be at (1,2,0), or the X in the below ascii art.
+
+           4 +-----+-----+-----+
+             |  .  |  .  |  .  |
+           3 +-----+-----+-----+
+             |  .  |  .  |  .  |
+           2 +-----X-----+-----+
+             |  .  |  .  |  .  |
+           1 +-----+-----+-----+
+             |  .  |  .  |  .  |
+           0 +-----+-----+-----+
+             0     1     2     3
+
+     An example model in this grid form factor might look like this:
+
+           4 +-----+-----+-----+
+             |  .  |  .  |  .  |
+           3 +-----+-----+-----+
+                   |  .  |
+           2       X-----+
+                   |  .  |
+           1       +-----+
+                   |  .  |
+           0       +-----+
+             0     1     2     3
+
+     If you were to generate a mesh from this, clearly each vertex and each face would be on an integer 
+     coordinate eg. 1, 2, 3 etc. while the centre of each grid location (ie. the . in the above diagram) 
+     will be on a coordinate that is halfway between integer coordinates. eg. 1.5, 2.5, 3.5 etc.
+
+     To ensure your mesh is properly centered such that instance transforms are correctly applied, you
+     want the pivot to be treated as if it were (0,0,0) in model space. To achieve this, simply 
+     subtract the pivot from any geometry that is generated (eg. vertices in a mesh).
+
+     For the 3x4x1 voxel model above, doing this would look like this:
+
+           2 +-----+-----+-----+
+             |  .  |  .  |  .  |
+           1 +-----+-----+-----+
+                   |  .  |
+           0       X-----+
+                   |  .  |
+          -1       +-----+
+                   |  .  |
+          -2       +-----+
+            -1     0     1     2
+
+   
 */
 #ifndef OGT_VOX_H__
 #define OGT_VOX_H__
