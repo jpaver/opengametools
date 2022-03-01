@@ -24,8 +24,8 @@
 
     HOW TO READ A VOX SCENE (See demo_vox.cpp)
 
-    1. load a .vox file off disk into a memory buffer. 
-       
+    1. load a .vox file off disk into a memory buffer.
+
     2. construct a scene from the memory buffer:
        ogt_vox_scene* scene = ogt_vox_read_scene(buffer, buffer_size);
 
@@ -34,10 +34,10 @@
 
     4. destroy the scene:
        ogt_vox_destroy_scene(scene);
-    
+
     HOW TO MERGE MULTIPLE VOX SCENES (See merge_vox.cpp)
 
-    1. construct multiple scenes from files you want to merge. 
+    1. construct multiple scenes from files you want to merge.
 
         // read buffer1/buffer_size1 from "test1.vox"
         // read buffer2/buffer_size2 from "test2.vox"
@@ -109,7 +109,7 @@
     to an RGB-distance matched color when all 256 colors in the merged
     scene palette has been allocated.
 
-    You can explicitly control up to 255 merge palette colors by providing 
+    You can explicitly control up to 255 merge palette colors by providing
     those colors to ogt_vox_merge_scenes in the required_colors parameters eg.
 
         const ogt_vox_palette palette;  // load this via .vox or procedurally or whatever
@@ -148,12 +148,12 @@
            0       +-----+
              0     1     2     3
 
-     If you were to generate a mesh from this, clearly each vertex and each face would be on an integer 
-     coordinate eg. 1, 2, 3 etc. while the centre of each grid location (ie. the . in the above diagram) 
+     If you were to generate a mesh from this, clearly each vertex and each face would be on an integer
+     coordinate eg. 1, 2, 3 etc. while the centre of each grid location (ie. the . in the above diagram)
      will be on a coordinate that is halfway between integer coordinates. eg. 1.5, 2.5, 3.5 etc.
 
      To ensure your mesh is properly centered such that instance transforms are correctly applied, you
-     want the pivot to be treated as if it were (0,0,0) in model space. To achieve this, simply 
+     want the pivot to be treated as if it were (0,0,0) in model space. To achieve this, simply
      subtract the pivot from any geometry that is generated (eg. vertices in a mesh).
 
      For the 3x4x1 voxel model above, doing this would look like this:
@@ -169,12 +169,12 @@
           -2       +-----+
             -1     0     1     2
 
-   
+
 */
 #ifndef OGT_VOX_H__
 #define OGT_VOX_H__
 
-#if _MSC_VER == 1400	
+#if _MSC_VER == 1400
     // VS2005 doesn't have inttypes or stdint so we just define what we need here.
     typedef unsigned char uint8_t;
     typedef signed int    int32_t;
@@ -189,7 +189,7 @@
 		#define UINT8_MAX	((uint8_t)0xFF)
 	#endif
 #elif defined(_MSC_VER)
-    // general VS* 
+    // general VS*
     #include <inttypes.h>
 #elif __APPLE__
     // general Apple compiler
@@ -937,7 +937,7 @@
         uint32_t file_version = 0;
         _vox_file_read(fp, &file_header, sizeof(uint32_t));
         _vox_file_read(fp, &file_version, sizeof(uint32_t));
-        if (file_header != CHUNK_ID_VOX_ || file_version != 150)
+        if (file_header != CHUNK_ID_VOX_ || (file_version != 150 && file_version != 200))
             return NULL;
 
         // parse chunks until we reach the end of the file/buffer
@@ -1041,38 +1041,41 @@
                             hidden = (hidden_string[0] == '1' ? true : false);
                     }
 
-
                     // get other properties.
                     uint32_t child_node_id = 0, reserved_id = 0, layer_id = 0, num_frames = 0;
                     _vox_file_read(fp, &child_node_id, sizeof(child_node_id));
                     _vox_file_read(fp, &reserved_id,   sizeof(reserved_id));
                     _vox_file_read(fp, &layer_id,      sizeof(layer_id));
                     _vox_file_read(fp, &num_frames,    sizeof(num_frames));
-                    assert(reserved_id == UINT32_MAX && num_frames == 1); // must be these values according to the spec
+                    assert(reserved_id == UINT32_MAX); // must be these values according to the spec
+                    assert(file_version != 150 || num_frames == 1); // must be these values according to the spec
 
-                    // Parse the frame dictionary that contains:
-                    //   _r : int8 ROTATION (c)
-                    //   _t : int32x3 translation
-                    // and extract a transform
-                    ogt_vox_transform frame_transform;
-                    {
-                        _vox_file_read_dict(&dict, fp);
-                        const char* rotation_value    = _vox_dict_get_value_as_string(&dict, "_r");
-                        const char* translation_value = _vox_dict_get_value_as_string(&dict, "_t");
-                        frame_transform = _vox_make_transform_from_dict_strings(rotation_value, translation_value);
-                    }
-                    // setup the transform node.
-                    {
-                        nodes.grow_to_fit_index(node_id);
-                        _vox_scene_node_* transform_node = &nodes[node_id];
-                        assert(transform_node);
-                        transform_node->node_type = k_nodetype_transform;
-                        transform_node->u.transform.child_node_id = child_node_id;
-                        transform_node->u.transform.layer_id      = layer_id;
-                        transform_node->u.transform.transform     = frame_transform;
-                        transform_node->u.transform.hidden        = hidden;
-                        // assign the name
-                        _vox_strcpy_static(transform_node->u.transform.name, node_name);
+                    // TODO: multiple frames are not yet supported - but at least the vox files from magicavoxel >= 0.99.7 are loading again
+                    for (uint32_t f = 0; f < num_frames; ++f) {
+                        // Parse the frame dictionary that contains:
+                        //   _r : int8 ROTATION (c)
+                        //   _t : int32x3 translation
+                        // and extract a transform
+                        ogt_vox_transform frame_transform;
+                        {
+                            _vox_file_read_dict(&dict, fp);
+                            const char* rotation_value    = _vox_dict_get_value_as_string(&dict, "_r");
+                            const char* translation_value = _vox_dict_get_value_as_string(&dict, "_t");
+                            frame_transform = _vox_make_transform_from_dict_strings(rotation_value, translation_value);
+                        }
+                        // setup the transform node.
+                        {
+                            nodes.grow_to_fit_index(node_id);
+                            _vox_scene_node_* transform_node = &nodes[node_id];
+                            assert(transform_node);
+                            transform_node->node_type = k_nodetype_transform;
+                            transform_node->u.transform.child_node_id = child_node_id;
+                            transform_node->u.transform.layer_id      = layer_id;
+                            transform_node->u.transform.transform     = frame_transform;
+                            transform_node->u.transform.hidden        = hidden;
+                            // assign the name
+                            _vox_strcpy_static(transform_node->u.transform.name, node_name);
+                        }
                     }
                     break;
                 }
@@ -1084,7 +1087,7 @@
                     // parse the node dictionary - data is unused.
                     _vox_file_read_dict(&dict, fp);
 
-                    // setup the group node 
+                    // setup the group node
                     nodes.grow_to_fit_index(node_id);
                     _vox_scene_node_* group_node = &nodes[node_id];
                     group_node->node_type = k_nodetype_group;
@@ -1111,7 +1114,7 @@
                     uint32_t node_id = 0;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
 
-                    // setup the shape node 
+                    // setup the shape node
                     nodes.grow_to_fit_index(node_id);
                     _vox_scene_node_* shape_node = &nodes[node_id];
                     shape_node->node_type = k_nodetype_shape;
@@ -1152,7 +1155,7 @@
                     layers[layer_id].name = NULL;
                     layers[layer_id].hidden = false;
 
-                    // if we got a layer name from the LAYR dictionary, allocate space in string_data for it and keep track of the index 
+                    // if we got a layer name from the LAYR dictionary, allocate space in string_data for it and keep track of the index
                     // within string data. This will be patched to a real pointer at the very end.
                     const char* name_string = _vox_dict_get_value_as_string(&dict, "_name", NULL);
                     if (name_string) {
