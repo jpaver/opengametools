@@ -1166,7 +1166,6 @@
                         layers[layer_id].hidden = (hidden_string[0] == '1' ? true : false);
                     break;
                 }
-                // we don't handle MATL/MATT/rOBJ or any other chunks for now, so we just skip the chunk payload.
                 case CHUNK_ID_MATL:
                 {
                     int32_t material_id = 0;
@@ -1267,6 +1266,60 @@
                     break;
                 }
                 case CHUNK_ID_MATT:
+                {
+                    int32_t material_id = 0;
+                    _vox_file_read(fp, &material_id, sizeof(material_id));
+                    material_id = material_id & 0xFF; // incoming material 256 is material 0
+
+                    // 0 : diffuse
+                    // 1 : metal
+                    // 2 : glass
+                    // 3 : emissive
+                    int32_t material_type = 0;
+                    _vox_file_read(fp, &material_type, sizeof(material_type));
+
+                    // diffuse  : 1.0
+                    // metal    : (0.0 - 1.0] : blend between metal and diffuse material
+                    // glass    : (0.0 - 1.0] : blend between glass and diffuse material
+                    // emissive : (0.0 - 1.0] : self-illuminated material
+                    float material_weight = 0.0f;
+                    _vox_file_read(fp, &material_weight, sizeof(material_weight));
+
+                    // bit(0) : Plastic
+                    // bit(1) : Roughness
+                    // bit(2) : Specular
+                    // bit(3) : IOR
+                    // bit(4) : Attenuation
+                    // bit(5) : Power
+                    // bit(6) : Glow
+                    // bit(7) : isTotalPower (*no value)
+                    uint32_t property_bits = 0u;
+                    _vox_file_read(fp, &property_bits, sizeof(property_bits));
+
+                    materials.matl[material_id].type = (ogt_matl_type)material_type;
+                    switch (material_type) {
+                    case ogt_matl_type_diffuse:
+                        break;
+                    case ogt_matl_type_metal:
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_metal;
+                        materials.matl[material_id].metal = material_weight;
+                        break;
+                    case ogt_matl_type_glass:
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_trans;
+                        materials.matl[material_id].trans = material_weight;
+                        break;
+                    case ogt_matl_type_emit:
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_emit;
+                        materials.matl[material_id].emit = material_weight;
+                        break;
+                    }
+
+                    assert(chunk_size >= 16u);
+                    const uint32_t remaining = chunk_size - 16u;
+                    _vox_file_seek_forwards(fp, remaining);
+                    break;
+                }
+                // we don't handle rOBJ (just a dict of render settings), so we just skip the chunk payload.
                 case CHUNK_ID_rOBJ:
                 default:
                 {
