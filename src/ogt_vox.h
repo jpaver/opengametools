@@ -431,11 +431,11 @@
     };
 
     // internal math/helper utilities
-    static inline uint32_t _vox_max(uint32_t a, uint32_t b) { 
-        return (a > b) ? a : b; 
+    static inline uint32_t _vox_max(uint32_t a, uint32_t b) {
+        return (a > b) ? a : b;
     }
-    static inline uint32_t _vox_min(uint32_t a, uint32_t b) { 
-        return (a < b) ? a : b; 
+    static inline uint32_t _vox_min(uint32_t a, uint32_t b) {
+        return (a < b) ? a : b;
     }
 
     // string utilities
@@ -452,7 +452,7 @@
         #define _vox_strcasecmp(a,b)         strcasecmp(a,b)
         #define _vox_strcmp(a,b)             strcmp(a,b)
         #define _vox_strlen(a)               strlen(a)
-        #define _vox_sprintf(str,str_max,fmt,...)    snprintf(str, str_max, fmt, __VA_ARGS__)        
+        #define _vox_sprintf(str,str_max,fmt,...)    snprintf(str, str_max, fmt, __VA_ARGS__)
     #endif
 
     // 3d vector utilities
@@ -503,7 +503,7 @@
     // memory allocation utils.
     static void* _ogt_priv_alloc_default(size_t size) { return malloc(size); }
     static void  _ogt_priv_free_default(void* ptr)    { free(ptr); }
-    static ogt_vox_alloc_func g_alloc_func = _ogt_priv_alloc_default; // default function for allocating 
+    static ogt_vox_alloc_func g_alloc_func = _ogt_priv_alloc_default; // default function for allocating
     static ogt_vox_free_func  g_free_func = _ogt_priv_free_default;   // default  function for freeing.
 
     // set the provided allocate/free functions if they are non-null, otherwise reset to default allocate/free functions
@@ -727,7 +727,7 @@
 
         if (rotation_string != NULL) {
             // compute the per-row indexes into k_vectors[] array.
-            // unpack rotation bits. 
+            // unpack rotation bits.
             //  bits  : meaning
             //  0 - 1 : index of the non-zero entry in the first row
             //  2 - 3 : index of the non-zero entry in the second row
@@ -808,9 +808,9 @@
     {
         const _vox_scene_node_* node = &nodes[node_index];
         assert(node);
-        switch (node->node_type) 
+        switch (node->node_type)
         {
-            case k_nodetype_transform: 
+            case k_nodetype_transform:
             {
                 ogt_vox_transform new_transform = (generate_groups) ? node->u.transform.transform  // don't multiply by the parent transform. caller wants the group-relative transform
                         : _vox_transform_multiply(node->u.transform.transform, transform);         // flatten the transform if we're not generating groups: child transform * parent transform
@@ -819,7 +819,7 @@
                 generate_instances_for_node(nodes, node->u.transform.child_node_id, child_id_array, node->u.transform.layer_id, new_transform, model_ptrs, transform_last_name, node->u.transform.hidden, instances, string_data, groups, group_index, generate_groups);
                 break;
             }
-            case k_nodetype_group: 
+            case k_nodetype_group:
             {
                 // create a new group only if we're generating groups.
                 uint32_t next_group_index = 0;
@@ -1057,10 +1057,15 @@
                         //   _t : int32x3 translation
                         // and extract a transform
                         ogt_vox_transform frame_transform;
+                        uint32_t frame = 0;
                         {
                             _vox_file_read_dict(&dict, fp);
                             const char* rotation_value    = _vox_dict_get_value_as_string(&dict, "_r");
                             const char* translation_value = _vox_dict_get_value_as_string(&dict, "_t");
+                            const char* frame_value       = _vox_dict_get_value_as_string(&dict, "_f");
+                            if (frame_value) {
+                                frame = atoi(frame_value);
+                            }
                             frame_transform = _vox_make_transform_from_dict_strings(rotation_value, translation_value);
                         }
                         // setup the transform node.
