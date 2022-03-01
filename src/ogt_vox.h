@@ -787,6 +787,7 @@
                 ogt_vox_transform transform;
                 uint32_t          child_node_id;
                 uint32_t          layer_id;
+                uint32_t          frame;
                 bool              hidden;
             } transform;
             // used only when node_type == k_nodetype_group
@@ -1076,6 +1077,7 @@
                             transform_node->node_type = k_nodetype_transform;
                             transform_node->u.transform.child_node_id = child_node_id;
                             transform_node->u.transform.layer_id      = layer_id;
+                            transform_node->u.transform.frame         = frame;
                             transform_node->u.transform.transform     = frame_transform;
                             transform_node->u.transform.hidden        = hidden;
                             // assign the name
