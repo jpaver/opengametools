@@ -335,6 +335,7 @@
     // describes a group within the scene
     typedef struct ogt_vox_group
     {
+        const char*       name;                 // name of the group if there is one, will be NULL otherwise
         ogt_vox_transform transform;            // transform of this group relative to its parent group (if any), otherwise this will be relative to world-space.
         uint32_t          parent_group_index;   // if this group is parented to another group, this will be the index of its parent in the scene's groups[] array, otherwise this group will be the scene root group and this value will be k_invalid_group_index
         uint32_t          layer_index;          // which layer this group belongs to. used to lookup the layer in the scene's layers[] array.
@@ -881,6 +882,14 @@
                     group.transform          = last_transform->u.transform.transform;
                     group.hidden             = last_transform->u.transform.hidden;
                     group.layer_index        = last_transform->u.transform.layer_id;
+                    group.name               = 0;
+                    const char* transform_last_name = last_transform->u.transform.name;
+                    if (transform_last_name && transform_last_name[0]) {
+                        group.name = (const char*)(string_data.size());
+                        size_t name_size = _vox_strlen(transform_last_name) + 1;       // +1 for terminator
+                        string_data.push_back_many(transform_last_name, name_size);
+                    }
+
                     groups.push_back(group);
                 }
 
@@ -1433,6 +1442,7 @@
             // if we're not reading scene-embedded groups, we generate only one and then flatten all instance transforms.
             if (!generate_groups) {
                 ogt_vox_group root_group;
+                root_group.name               = 0;
                 root_group.transform          = _vox_transform_identity();
                 root_group.parent_group_index = k_invalid_group_index;
                 root_group.layer_index        = 0;
@@ -1633,6 +1643,11 @@
                 memcpy(scene_groups, &groups[0], sizeof(ogt_vox_group)* num_scene_groups);
             scene->groups     = scene_groups;
             scene->num_groups = (uint32_t)num_scene_groups;
+
+            // now patch up group name pointers to point into the scene string area
+            for (uint32_t i = 0; i < num_scene_groups; i++)
+                if (scene_groups[i].name)
+                    scene_groups[i].name = scene_string_data + (size_t)scene_groups[i].name;
 
             // now patch up instance name pointers to point into the scene string area
             for (uint32_t i = 0; i < num_scene_instances; i++)
@@ -1896,7 +1911,7 @@
         // write the nTRN nodes for each of the groups in the scene.
         for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
             const ogt_vox_group* group = &scene->groups[group_index];
-            _vox_file_write_chunk_nTRN(fp, first_group_transform_node_id + group_index, first_group_node_id + group_index, NULL, group->hidden, &group->transform, group->layer_index);
+            _vox_file_write_chunk_nTRN(fp, first_group_transform_node_id + group_index, first_group_node_id + group_index, group->name, group->hidden, &group->transform, group->layer_index);
         }
         // write the group nodes for each of the groups in the scene
         for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
@@ -2412,6 +2427,7 @@
         uint32_t global_root_group_index = 0;
         {
             ogt_vox_group root_group;
+            root_group.name               = NULL;
             root_group.hidden             = false;
             root_group.layer_index        = 0;
             root_group.parent_group_index = k_invalid_group_index;
@@ -2476,6 +2492,8 @@
                 ogt_assert(dst_group.parent_group_index < scene->num_groups, "group index is out of bounds");
                 dst_group.layer_index        = 0;
                 dst_group.parent_group_index = (dst_group.parent_group_index == 0) ? global_root_group_index : base_group_index + (dst_group.parent_group_index - 1);
+                if (dst_group.name)
+                    string_data_size += _vox_strlen(dst_group.name) + 1; // + 1 for zero terminator
                 // if this group belongs to the global root group, it must be translated so it doesn't overlap with other scenes.
                 if (dst_group.parent_group_index == global_root_group_index)
                     dst_group.transform.m30 += scene_offset_x;
