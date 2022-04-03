@@ -620,6 +620,16 @@
             }
             data[count++] = new_element;
         }
+        void pop_back() {
+            ogt_assert(count > 0, "cannot pop_back on empty array");
+            count--;
+        }
+        const T & peek_back(size_t back_offset = 0) const {
+            ogt_assert(back_offset < count, "can't peek back further than the number of elements in an array");
+            size_t index = count - 1 - back_offset;
+            return data[index];
+        }
+
         void push_back_many(const T * new_elements, size_t num_elements) {
             if (count + num_elements > capacity) {
                 size_t new_capacity = capacity + num_elements;
@@ -832,22 +842,29 @@
         } u;
     };
 
+    // iterates over all transform nodes from root to leaf and computes a flattened transform.
+    static ogt_vox_transform compute_flattened_transform(_vox_array<const _vox_scene_node_*> & stack) {
+        ogt_vox_transform transform = _vox_transform_identity();
+        for (uint32_t i = 0; i < stack.size(); i += 2) {
+            const _vox_scene_node_* transform_node = stack[i];
+            ogt_assert(transform_node->node_type == k_nodetype_transform, "expected transform node");
+            transform = _vox_transform_multiply(transform_node->u.transform.transform, transform);
+        }
+        return transform;
+    }
+
     static void generate_instances_for_node(
-        const _vox_array<_vox_scene_node_> & nodes, uint32_t node_index, const _vox_array<uint32_t> & child_id_array, uint32_t layer_index,
-        const ogt_vox_transform& transform, const _vox_array<ogt_vox_model*> & model_ptrs, const char* transform_last_name, bool transform_last_hidden,
+        _vox_array<const _vox_scene_node_*> & stack, const _vox_array<_vox_scene_node_> & nodes, uint32_t node_index, const _vox_array<uint32_t> & child_id_array, const _vox_array<ogt_vox_model*> & model_ptrs,
         _vox_array<ogt_vox_instance> & instances, _vox_array<char> & string_data, _vox_array<ogt_vox_group>& groups, uint32_t group_index, bool generate_groups)
     {
         const _vox_scene_node_* node = &nodes[node_index];
-        ogt_assert(node, "invalid node index");
         switch (node->node_type)
         {
             case k_nodetype_transform:
             {
-                ogt_vox_transform new_transform = (generate_groups) ? node->u.transform.transform  // don't multiply by the parent transform. caller wants the group-relative transform
-                        : _vox_transform_multiply(node->u.transform.transform, transform);         // flatten the transform if we're not generating groups: child transform * parent transform
-                const char* new_transform_name = node->u.transform.name[0] ? node->u.transform.name : NULL;
-                transform_last_name = new_transform_name ? new_transform_name : transform_last_name;    // if this node has a name, use it instead of our parent name
-                generate_instances_for_node(nodes, node->u.transform.child_node_id, child_id_array, node->u.transform.layer_id, new_transform, model_ptrs, transform_last_name, node->u.transform.hidden, instances, string_data, groups, group_index, generate_groups);
+                stack.push_back(node);
+                generate_instances_for_node(stack, nodes, node->u.transform.child_node_id, child_id_array, model_ptrs, instances, string_data, groups, group_index, generate_groups);
+                stack.pop_back();
                 break;
             }
             case k_nodetype_group:
@@ -855,21 +872,24 @@
                 // create a new group only if we're generating groups.
                 uint32_t next_group_index = 0;
                 if (generate_groups) {
+                    const _vox_scene_node_* last_transform = stack.peek_back(0);
+                    ogt_assert(last_transform->node_type == k_nodetype_transform, "expected transform node prior to group node");
+
                     next_group_index = (uint32_t)groups.size();
                     ogt_vox_group group;
                     group.parent_group_index = group_index;
-                    group.transform          = transform;
-                    group.hidden             = transform_last_hidden;
-                    group.layer_index        = layer_index;
+                    group.transform          = last_transform->u.transform.transform;
+                    group.hidden             = last_transform->u.transform.hidden;
+                    group.layer_index        = last_transform->u.transform.layer_id;
                     groups.push_back(group);
                 }
-                // child nodes will only be hidden if their immediate transform is hidden.
-                transform_last_hidden = false;
 
+                stack.push_back(node);
                 const uint32_t* child_node_ids = (const uint32_t*)& child_id_array[node->u.group.first_child_node_id_index];
                 for (uint32_t i = 0; i < node->u.group.num_child_nodes; i++) {
-                    generate_instances_for_node(nodes, child_node_ids[i], child_id_array, layer_index, transform, model_ptrs, transform_last_name, transform_last_hidden, instances, string_data, groups, next_group_index, generate_groups);
+                    generate_instances_for_node(stack, nodes, child_node_ids[i], child_id_array, model_ptrs, instances, string_data, groups, next_group_index, generate_groups);
                 }
+                stack.pop_back();
                 break;
             }
             case k_nodetype_shape:
@@ -878,16 +898,22 @@
                 if (node->u.shape.model_id < model_ptrs.size() &&    // model ID is valid
                     model_ptrs[node->u.shape.model_id] != NULL )     // model is non-NULL.
                 {
+                    const _vox_scene_node_* last_transform = stack.peek_back(0);
+                    const _vox_scene_node_* last_group     = stack.peek_back(1);
+                    ogt_assert(last_transform->node_type == k_nodetype_transform, "parent node type to a shape node must be a transform node");
+                    ogt_assert(last_group->node_type == k_nodetype_group, "grandparent node type to a shape node must be a group node");
+
                     ogt_assert(generate_groups || group_index == 0, "if we're not generating groups, group_index should be zero to map to the root group");
                     ogt_vox_instance new_instance;
                     new_instance.model_index = node->u.shape.model_id;
-                    new_instance.transform   = transform;
-                    new_instance.layer_index = layer_index;
+                    new_instance.transform   = generate_groups ? last_transform->u.transform.transform : compute_flattened_transform(stack);
+                    new_instance.layer_index = last_transform->u.transform.layer_id;
                     new_instance.group_index = group_index;
-                    new_instance.hidden      = transform_last_hidden;
+                    new_instance.hidden      = last_transform->u.transform.hidden;
                     // if we got a transform name, allocate space in string_data for it and keep track of the index
                     // within string data. This will be patched to a real pointer at the very end.
                     new_instance.name = 0;
+                    const char* transform_last_name = last_transform->u.transform.name;
                     if (transform_last_name && transform_last_name[0]) {
                         new_instance.name = (const char*)(string_data.size());
                         size_t name_size = _vox_strlen(transform_last_name) + 1;       // +1 for terminator
@@ -1413,7 +1439,10 @@
                 root_group.hidden             = false;
                 groups.push_back(root_group);
             }
-            generate_instances_for_node(nodes, 0, child_ids, 0, _vox_transform_identity(), model_ptrs, NULL, false, instances, string_data, groups, k_invalid_group_index, generate_groups);
+            _vox_array< const _vox_scene_node_*> stack;
+            stack.reserve(64);
+
+            generate_instances_for_node(stack, nodes, 0, child_ids, model_ptrs, instances, string_data, groups, k_invalid_group_index, generate_groups);
         }
         else if (model_ptrs.size() == 1) {
             // add a single instance
