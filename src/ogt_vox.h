@@ -401,7 +401,7 @@
     // callers can override asserts in ogt_vox by defining their own macro before the implementation
 #ifndef ogt_assert
     #include <assert.h>
-    #define ogt_assert(x, msg_str)      do { assert( x && msg_str ); } while( 0 )
+    #define ogt_assert(x, msg_str)      do { assert((x) && (msg_str)); } while(0)
 #endif
     #include <stdlib.h>
     #include <string.h>
