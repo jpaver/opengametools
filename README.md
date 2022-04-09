@@ -25,6 +25,8 @@ With this library, reading a .vox file will result in a ogt_vox_scene structure 
 - access the voxel model referenced by those placements ie. the 3d color grid.
 - access the palette colors
 - access layer, group and visible/hidden state for instances / groups.
+- access model-swap keyframes for instances 
+- access transform keyframes for instances / groups
 
 I use this library to deep-reference models in .vox files and turn them into triangle meshes in my engine's importer/cooker. I also use it in an in-engine wizard to import all instance/scene data into your own engine scene format. This can allow your artists to use MagicaVoxel as a level editor, or simply a tool for managing a kit, palette of module-set to be used within levels or objects within your own editor. 
 
