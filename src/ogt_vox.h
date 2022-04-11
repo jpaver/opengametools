@@ -630,7 +630,12 @@
         }
         void resize(size_t new_count) {
             if (new_count > capacity)
-                reserve(new_count);
+            {
+                size_t new_capacity = capacity ? (capacity * 3) >> 1 : 2;   // grow by 50% each time, otherwise start at 2 elements.
+                new_capacity = new_count > new_capacity ? new_count : new_capacity; // ensure fits new_count
+                reserve(new_capacity);
+                assert(capacity >= new_count);
+            }
             count = new_count;
         }
         void push_back(const T & new_element) {
