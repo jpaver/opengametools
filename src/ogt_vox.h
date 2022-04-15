@@ -421,11 +421,17 @@
     // If you require specific colors in the merged scene palette, provide up to and including 255 of them via required_colors/required_color_count.
     ogt_vox_scene* ogt_vox_merge_scenes(const ogt_vox_scene** scenes, uint32_t scene_count, const ogt_vox_rgba* required_colors, const uint32_t required_color_count);
 
-    // sample which model_index the given animation produces at the given frame
+    // samples which model_index the given animation produces at the given frame
     uint32_t          ogt_vox_sample_anim_model(const ogt_vox_anim_model* anim, uint32_t frame_index);
 
-    // sample which transform the given animation produces at the given frame
+    // // sample which transform the given animation produces at the given frame
     ogt_vox_transform ogt_vox_sample_anim_transform(const ogt_vox_anim_transform* anim, uint32_t frame_index);
+
+    // sample the model for a given instance at the given frame
+    uint32_t          ogt_vox_sample_instance_model(const ogt_vox_instance* instance, uint32_t frame_index);
+
+    // sample the flattened transform for a given instance at the given frame (takes into account group hierarchy and group animations)
+    ogt_vox_transform ogt_vox_sample_instance_transform(const ogt_vox_instance* instance, uint32_t frame_index, const ogt_vox_scene* scene);
 
 #endif // OGT_VOX_H__
 
@@ -1059,10 +1065,30 @@
         // but they are only equal if they have exactly the same voxel data.
         return memcmp(lhs->voxel_data, rhs->voxel_data, num_voxels_lhs) == 0 ? true : false;
     }
-    
-    static ogt_vox_transform sample_keyframe_transform(const ogt_vox_keyframe_transform* keyframes, uint32_t num_keyframes, uint32_t frame_index)
+
+    // wraps the specified frame_index such that it is inclusively between the first and last loop frames
+    uint32_t compute_looped_frame_index(uint32_t first_loop_frame, uint32_t last_loop_frame, uint32_t frame_index)
+    {
+        uint32_t loop_len = 1 + last_loop_frame - first_loop_frame;
+        uint32_t looped_frame_index;
+        if (frame_index >= first_loop_frame) {
+            uint32_t frames_since_first_frame = frame_index - first_loop_frame;
+            looped_frame_index = first_loop_frame + (frames_since_first_frame % loop_len);
+        }
+        else {
+            uint32_t frames_since_first_frame = (first_loop_frame - frame_index - 1);
+            looped_frame_index = last_loop_frame - (frames_since_first_frame % loop_len);
+        }
+        ogt_assert(looped_frame_index >= first_loop_frame && looped_frame_index <= last_loop_frame, "bug in looping logic!");
+        return looped_frame_index;
+    }
+
+    static ogt_vox_transform sample_keyframe_transform(const ogt_vox_keyframe_transform* keyframes, uint32_t num_keyframes, bool loop, uint32_t frame_index)
     {
         ogt_assert(num_keyframes >= 1, "need at least one keyframe to sample");
+        if (loop) {
+            frame_index = compute_looped_frame_index(keyframes[0].frame_index, keyframes[num_keyframes-1].frame_index, frame_index);
+        }
         if (frame_index <= keyframes[0].frame_index)
             return keyframes[0].transform;
         if (frame_index >= keyframes[num_keyframes-1].frame_index)
@@ -1091,12 +1117,15 @@
 
     ogt_vox_transform ogt_vox_sample_anim_transform(const ogt_vox_anim_transform* anim, uint32_t frame_index)
     {
-        return sample_keyframe_transform(anim->keyframes, anim->num_keyframes, frame_index);
+        return sample_keyframe_transform(anim->keyframes, anim->num_keyframes, anim->loop, frame_index);
     }
 
     uint32_t ogt_vox_sample_anim_model(const ogt_vox_anim_model* anim, uint32_t frame_index)
     {
         ogt_assert(anim->num_keyframes >= 1, "need at least one keyframe to sample");
+        if (anim->loop) {
+            frame_index = compute_looped_frame_index(anim->keyframes[0].frame_index, anim->keyframes[anim->num_keyframes-1].frame_index, frame_index);
+        }
         if (frame_index <= anim->keyframes[0].frame_index)
             return anim->keyframes[0].model_index;
         if (frame_index >=anim-> keyframes[anim->num_keyframes-1].frame_index)
@@ -1108,6 +1137,25 @@
         }
         ogt_assert(0, "shouldn't reach here");
         return anim->keyframes[0].model_index;
+    }
+
+    // computes the flattened transform for an instance on a given frame (pass the scene so that group transform hierarchy can also be considered)
+    ogt_vox_transform ogt_vox_sample_instance_transform(const ogt_vox_instance* instance, uint32_t frame_index, const ogt_vox_scene* scene)
+    {
+        ogt_vox_transform flattened_transform = instance->transform_anim.num_keyframes ? ogt_vox_sample_anim_transform(&instance->transform_anim, frame_index) : instance->transform;
+        uint32_t group_index = instance->group_index;
+        while (group_index != k_invalid_group_index) {
+            const ogt_vox_group* group = &scene->groups[group_index];
+            ogt_vox_transform group_transform = group->transform_anim.num_keyframes ? ogt_vox_sample_anim_transform(&group->transform_anim, frame_index) : group->transform;
+            flattened_transform = _vox_transform_multiply(flattened_transform, group_transform);
+            group_index = group->parent_group_index;
+        }
+        return flattened_transform;
+    }
+
+    uint32_t ogt_vox_sample_instance_model(const ogt_vox_instance* instance, uint32_t frame_index)
+    {
+        return instance->model_anim.num_keyframes ? ogt_vox_sample_anim_model(&instance->model_anim, frame_index) : instance->model_index;
     }
 
     const ogt_vox_scene* ogt_vox_read_scene_with_flags(const uint8_t * buffer, uint32_t buffer_size, uint32_t read_flags) {
@@ -1661,12 +1709,12 @@
                         for (uint32_t f = 0; f < frame_indices.size(); f++) {
                             uint32_t frame_index = frame_indices[f];
                             const ogt_vox_keyframe_transform* instance_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)instance->transform_anim.keyframes];
-                            ogt_vox_transform flattened_transform = sample_keyframe_transform(instance_keyframes, instance->transform_anim.num_keyframes, frame_index);
+                            ogt_vox_transform flattened_transform = sample_keyframe_transform(instance_keyframes, instance->transform_anim.num_keyframes, instance->transform_anim.loop, frame_index);
                             uint32_t group_index = instance->group_index;
                             while (group_index != k_invalid_group_index) {
                                 const ogt_vox_group* group = &groups[group_index];
                                 const ogt_vox_keyframe_transform* group_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)group->transform_anim.keyframes];
-                                ogt_vox_transform group_transform = sample_keyframe_transform(group_keyframes, group->transform_anim.num_keyframes, frame_index);
+                                ogt_vox_transform group_transform = sample_keyframe_transform(group_keyframes, group->transform_anim.num_keyframes, group->transform_anim.loop, frame_index);
                                 flattened_transform = _vox_transform_multiply(flattened_transform, group_transform);
                                 group_index = groups[group_index].parent_group_index;
                             }
@@ -2823,6 +2871,41 @@
             merged_scene->palette.color[color_index] = master_palette[color_index];
 
         return merged_scene;
+    }
+
+    void ogt_vox_test()
+    {
+        // frame_index looping tests
+        {
+            const char* test_message = "failed compute_looped_frame_index test";
+            // [0,0] = 1 keyframe animation starting at frame 0
+            ogt_assert(compute_looped_frame_index( 0,  0, 0 ) == 0, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  0, 1 ) == 0, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  0, 15) == 0, test_message);
+            // [1,1] = 1 keyframe animation starting at frame 1
+            ogt_assert(compute_looped_frame_index( 1,  1,  0) == 1, test_message);
+            ogt_assert(compute_looped_frame_index( 1,  1,  1) == 1, test_message);
+            ogt_assert(compute_looped_frame_index( 1,  1, 15) == 1, test_message);
+            // [0,9] = 10 keyframe animation starting at frame 0
+            ogt_assert(compute_looped_frame_index( 0,  9,  0) == 0, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  9,  4) == 4, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  9,  9) == 9, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  9, 10) == 0, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  9, 11) == 1, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  9, 14) == 4, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  9, 19) == 9, test_message);
+            ogt_assert(compute_looped_frame_index( 0,  9, 21) == 1, test_message);
+            // [4,13] = 10 keyframe animation starting at frame 4
+            ogt_assert(compute_looped_frame_index(4, 13, 0 ) == 10, test_message);
+            ogt_assert(compute_looped_frame_index(4, 13, 3 ) == 13, test_message);
+            ogt_assert(compute_looped_frame_index(4, 13, 4 ) == 4,  test_message);
+            ogt_assert(compute_looped_frame_index(4, 13, 5 ) == 5,  test_message);
+            ogt_assert(compute_looped_frame_index(4, 13, 12) == 12, test_message);
+            ogt_assert(compute_looped_frame_index(4, 13, 13) == 13, test_message);
+            ogt_assert(compute_looped_frame_index(4, 13, 14) == 4,  test_message);
+            ogt_assert(compute_looped_frame_index(4, 13, 21) == 11, test_message);
+        }
+
     }
 
  #endif // #ifdef OGT_VOX_IMPLEMENTATION
