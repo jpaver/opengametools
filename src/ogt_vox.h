@@ -326,20 +326,29 @@
         uint32_t model_index;
     } ogt_vox_keyframe_model;
 
+    // an animated transform 
+    typedef struct ogt_vox_anim_transform {
+        const ogt_vox_keyframe_transform* keyframes;
+        uint32_t                          num_keyframes;
+    } ogt_vox_anim_transform;
+
+    // an animated model
+    typedef struct ogt_vox_anim_model {
+        const ogt_vox_keyframe_model* keyframes;
+        uint32_t                      num_keyframes;
+    } ogt_vox_anim_model;
+
     // an instance of a model within the scene
     typedef struct ogt_vox_instance
     {
-        const char*                       name;                   // name of the instance if there is one, will be NULL otherwise.
-        ogt_vox_transform                 transform;              // orientation and position of this instance on first frame of the scene. This is relative to its group local transform if group_index is not 0
-        uint32_t                          model_index;            // index of the model used by this instance on the first frame of the scene. used to lookup the model in the scene's models[] array.
-        uint32_t                          layer_index;            // index of the layer used by this instance. used to lookup the layer in the scene's layers[] array.
-        uint32_t                          group_index;            // this will be the index of the group in the scene's groups[] array. If group is zero it will be the scene root group and the instance transform will be a world-space transform, otherwise the transform is relative to the group.
-        bool                              hidden;                 // whether this instance is individually hidden or not. Note: the instance can also be hidden when its layer is hidden, or if it belongs to a group that is hidden.
-
-        uint32_t                          num_transform_keyframes;// number of transform keyframes (if any)
-        const ogt_vox_keyframe_transform* transform_keyframes;    // array of transform keyframes (if any)
-        uint32_t                          num_model_keyframes;    // number of model keyframes (if any)
-        const ogt_vox_keyframe_model*     model_keyframes;        // array of model keyframes (if any)
+        const char*            name;                   // name of the instance if there is one, will be NULL otherwise.
+        ogt_vox_transform      transform;              // orientation and position of this instance on first frame of the scene. This is relative to its group local transform if group_index is not 0
+        uint32_t               model_index;            // index of the model used by this instance on the first frame of the scene. used to lookup the model in the scene's models[] array.
+        uint32_t               layer_index;            // index of the layer used by this instance. used to lookup the layer in the scene's layers[] array.
+        uint32_t               group_index;            // this will be the index of the group in the scene's groups[] array. If group is zero it will be the scene root group and the instance transform will be a world-space transform, otherwise the transform is relative to the group.
+        bool                   hidden;                 // whether this instance is individually hidden or not. Note: the instance can also be hidden when its layer is hidden, or if it belongs to a group that is hidden.
+        ogt_vox_anim_transform transform_anim;         // animation for the transform
+        ogt_vox_anim_model     model_anim;             // animation for the model_index
     } ogt_vox_instance;
 
     // describes a layer within the scene
@@ -352,13 +361,12 @@
     // describes a group within the scene
     typedef struct ogt_vox_group
     {
-        const char*                       name;                    // name of the group if there is one, will be NULL otherwise
-        ogt_vox_transform                 transform;               // transform of this group relative to its parent group (if any), otherwise this will be relative to world-space.
-        uint32_t                          parent_group_index;      // if this group is parented to another group, this will be the index of its parent in the scene's groups[] array, otherwise this group will be the scene root group and this value will be k_invalid_group_index
-        uint32_t                          layer_index;             // which layer this group belongs to. used to lookup the layer in the scene's layers[] array.
-        bool                              hidden;                  // whether this group is hidden or not.
-        uint32_t                          num_transform_keyframes; // number of transform keyframes (if any)
-        const ogt_vox_keyframe_transform* transform_keyframes;     // rray of transform keyframes (if any)
+        const char*            name;                    // name of the group if there is one, will be NULL otherwise
+        ogt_vox_transform      transform;               // transform of this group relative to its parent group (if any), otherwise this will be relative to world-space.
+        uint32_t               parent_group_index;      // if this group is parented to another group, this will be the index of its parent in the scene's groups[] array, otherwise this group will be the scene root group and this value will be k_invalid_group_index
+        uint32_t               layer_index;             // which layer this group belongs to. used to lookup the layer in the scene's layers[] array.
+        bool                   hidden;                  // whether this group is hidden or not.
+        ogt_vox_anim_transform transform_anim;          // animated transform data
     } ogt_vox_group;
 
     // the scene parsed from a .vox file.
@@ -409,6 +417,12 @@
     // merges the specified scenes together to create a bigger scene. Merged scene can be destroyed using ogt_vox_destroy_scene
     // If you require specific colors in the merged scene palette, provide up to and including 255 of them via required_colors/required_color_count.
     ogt_vox_scene* ogt_vox_merge_scenes(const ogt_vox_scene** scenes, uint32_t scene_count, const ogt_vox_rgba* required_colors, const uint32_t required_color_count);
+
+    // sample which model_index the given animation produces at the given frame
+    uint32_t          ogt_vox_sample_anim_model(const ogt_vox_anim_model* anim, uint32_t frame_index);
+
+    // sample which transform the given animation produces at the given frame
+    ogt_vox_transform ogt_vox_sample_anim_transform(const ogt_vox_anim_transform* anim, uint32_t frame_index);
 
 #endif // OGT_VOX_H__
 
@@ -912,6 +926,16 @@
         } u;
     };
 
+    static void clear_anim_transform(ogt_vox_anim_transform* anim) {
+        anim->num_keyframes = 0;
+        anim->keyframes = NULL;
+    }
+
+    static void clear_anim_model(ogt_vox_anim_model* anim) {
+        anim->num_keyframes = 0;
+        anim->keyframes = NULL;
+    }
+
     static void generate_instances_for_node(
         _vox_array<const _vox_scene_node_*> & stack, const _vox_array<_vox_scene_node_> & nodes, uint32_t node_index, const _vox_array<uint32_t> & child_id_array, const _vox_array<ogt_vox_model*> & model_ptrs,
         _vox_array<ogt_vox_instance> & instances, _vox_array<char> & misc_data, _vox_array<ogt_vox_group>& groups, uint32_t group_index, bool generate_keyframes)
@@ -947,11 +971,10 @@
                         size_t name_size = _vox_strlen(transform_last_name) + 1;       // +1 for terminator
                         misc_data.push_back_many(transform_last_name, name_size);
                     }
-                    group.num_transform_keyframes = 0;
-                    group.transform_keyframes     = NULL;
+                    clear_anim_transform(&group.transform_anim);
                     if (generate_keyframes) {
-                        group.num_transform_keyframes = last_transform->u.transform.num_keyframes;
-                        group.transform_keyframes     = (const ogt_vox_keyframe_transform*)(last_transform->u.transform.keyframe_offset);
+                        group.transform_anim.num_keyframes = last_transform->u.transform.num_keyframes;
+                        group.transform_anim.keyframes     = (const ogt_vox_keyframe_transform*)(last_transform->u.transform.keyframe_offset);
                     }
                     groups.push_back(group);
                 }
@@ -991,15 +1014,13 @@
                         misc_data.push_back_many(transform_last_name, name_size);
                     }
                     // generate keyframes if necessary.
-                    new_instance.num_model_keyframes     = 0;
-                    new_instance.model_keyframes         = NULL;
-                    new_instance.num_transform_keyframes = 0;
-                    new_instance.transform_keyframes     = NULL;
+                    clear_anim_transform(&new_instance.transform_anim);
+                    clear_anim_model(&new_instance.model_anim);
                     if (generate_keyframes) {
-                        new_instance.num_model_keyframes     = node->u.shape.num_keyframes;
-                        new_instance.model_keyframes         = (const ogt_vox_keyframe_model*)(node->u.shape.keyframe_offset);
-                        new_instance.num_transform_keyframes = last_transform->u.transform.num_keyframes;
-                        new_instance.transform_keyframes     = (const ogt_vox_keyframe_transform*)(last_transform->u.transform.keyframe_offset);
+                        new_instance.model_anim.num_keyframes     = node->u.shape.num_keyframes;
+                        new_instance.model_anim.keyframes         = (const ogt_vox_keyframe_model*)(node->u.shape.keyframe_offset);
+                        new_instance.transform_anim.num_keyframes = last_transform->u.transform.num_keyframes;
+                        new_instance.transform_anim.keyframes     = (const ogt_vox_keyframe_transform*)(last_transform->u.transform.keyframe_offset);
                     }
 
                     // create the instance
@@ -1030,7 +1051,7 @@
         return memcmp(lhs->voxel_data, rhs->voxel_data, num_voxels_lhs) == 0 ? true : false;
     }
     
-    ogt_vox_transform sample_keyframe_transform(const ogt_vox_keyframe_transform* keyframes, uint32_t num_keyframes, uint32_t frame_index)
+    static ogt_vox_transform sample_keyframe_transform(const ogt_vox_keyframe_transform* keyframes, uint32_t num_keyframes, uint32_t frame_index)
     {
         ogt_assert(num_keyframes >= 1, "need at least one keyframe to sample");
         if (frame_index <= keyframes[0].frame_index)
@@ -1057,6 +1078,27 @@
         }
         ogt_assert(0, "shouldn't reach here");
         return keyframes[0].transform;
+    }
+
+    ogt_vox_transform ogt_vox_sample_anim_transform(const ogt_vox_anim_transform* anim, uint32_t frame_index)
+    {
+        return sample_keyframe_transform(anim->keyframes, anim->num_keyframes, frame_index);
+    }
+
+    uint32_t ogt_vox_sample_anim_model(const ogt_vox_anim_model* anim, uint32_t frame_index)
+    {
+        ogt_assert(anim->num_keyframes >= 1, "need at least one keyframe to sample");
+        if (frame_index <= anim->keyframes[0].frame_index)
+            return anim->keyframes[0].model_index;
+        if (frame_index >=anim-> keyframes[anim->num_keyframes-1].frame_index)
+            return anim->keyframes[anim->num_keyframes-1].model_index;
+        for (int32_t f = (int32_t)anim->num_keyframes-2; f >= 0; f--) {
+            if (frame_index >= anim->keyframes[f].frame_index) {
+                return anim->keyframes[f+0].model_index;
+            }
+        }
+        ogt_assert(0, "shouldn't reach here");
+        return anim->keyframes[0].model_index;
     }
 
     const ogt_vox_scene* ogt_vox_read_scene_with_flags(const uint8_t * buffer, uint32_t buffer_size, uint32_t read_flags) {
@@ -1576,17 +1618,17 @@
                             frame_indices.resize(0);
                             // first populate frame_indices with the keyframes on the instance itself
                             uint32_t start_index = 0;
-                            const ogt_vox_keyframe_transform* instance_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)instance->transform_keyframes];
-                            for (uint32_t f = 0; f < instance->num_transform_keyframes; f++) {
+                            const ogt_vox_keyframe_transform* instance_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)instance->transform_anim.keyframes];
+                            for (uint32_t f = 0; f < instance->transform_anim.num_keyframes; f++) {
                                 start_index = frame_indices.insert_unique_sorted(instance_keyframes[f].frame_index, start_index);
                             }
                             // now populate frame_index with the keyframes on any parent groups.
                             uint32_t group_index = instance->group_index;
                             while (group_index != k_invalid_group_index) {
                                 const ogt_vox_group* group = &groups[group_index];
-                                const ogt_vox_keyframe_transform* group_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)group->transform_keyframes];
+                                const ogt_vox_keyframe_transform* group_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)group->transform_anim.keyframes];
                                 start_index = 0;
-                                for (uint32_t f = 0; f < group->num_transform_keyframes; f++) {
+                                for (uint32_t f = 0; f < group->transform_anim.num_keyframes; f++) {
                                     start_index = frame_indices.insert_unique_sorted(group_keyframes[f].frame_index, start_index);
                                 }
                                 group_index = group->parent_group_index;
@@ -1597,21 +1639,21 @@
                         ogt_vox_keyframe_transform* new_keyframes = (ogt_vox_keyframe_transform*)misc_data.alloc_many(sizeof(ogt_vox_keyframe_transform) * frame_indices.size());
                         for (uint32_t f = 0; f < frame_indices.size(); f++) {
                             uint32_t frame_index = frame_indices[f];
-                            const ogt_vox_keyframe_transform* instance_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)instance->transform_keyframes];
-                            ogt_vox_transform flattened_transform = sample_keyframe_transform(instance_keyframes, instance->num_transform_keyframes, frame_index);
+                            const ogt_vox_keyframe_transform* instance_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)instance->transform_anim.keyframes];
+                            ogt_vox_transform flattened_transform = sample_keyframe_transform(instance_keyframes, instance->transform_anim.num_keyframes, frame_index);
                             uint32_t group_index = instance->group_index;
                             while (group_index != k_invalid_group_index) {
                                 const ogt_vox_group* group = &groups[group_index];
-                                const ogt_vox_keyframe_transform* group_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)group->transform_keyframes];
-                                ogt_vox_transform group_transform = sample_keyframe_transform(group_keyframes, group->num_transform_keyframes, frame_index);
+                                const ogt_vox_keyframe_transform* group_keyframes = (const ogt_vox_keyframe_transform*)&misc_data[(size_t)group->transform_anim.keyframes];
+                                ogt_vox_transform group_transform = sample_keyframe_transform(group_keyframes, group->transform_anim.num_keyframes, frame_index);
                                 flattened_transform = _vox_transform_multiply(flattened_transform, group_transform);
                                 group_index = groups[group_index].parent_group_index;
                             }
                             new_keyframes[f].frame_index = frame_index;
                             new_keyframes[f].transform   = flattened_transform;
                         }
-                        instance->num_transform_keyframes = (uint32_t)frame_indices.size();
-                        instance->transform_keyframes = (ogt_vox_keyframe_transform*)new_keyframe_offset;
+                        instance->transform_anim.num_keyframes = (uint32_t)frame_indices.size();
+                        instance->transform_anim.keyframes     = (ogt_vox_keyframe_transform*)new_keyframe_offset;
                     }
                 }
 
@@ -1630,29 +1672,26 @@
                 // add just a single parent group.
                 groups.resize(0);
                 ogt_vox_group root_group;
-                root_group.name                    = 0;
-                root_group.transform               = _vox_transform_identity();
-                root_group.parent_group_index      = k_invalid_group_index;
-                root_group.layer_index             = 0;
-                root_group.hidden                  = false;
-                root_group.num_transform_keyframes = 0;
-                root_group.transform_keyframes     = NULL;
+                root_group.name                         = 0;
+                root_group.transform                    = _vox_transform_identity();
+                root_group.parent_group_index           = k_invalid_group_index;
+                root_group.layer_index                  = 0;
+                root_group.hidden                       = false;
+                clear_anim_transform(&root_group.transform_anim);
                 groups.push_back(root_group);
             }
         }
         else if (model_ptrs.size() == 1) {
             // add a single instance
             ogt_vox_instance new_instance;
-            new_instance.model_index             = 0;
-            new_instance.group_index             = 0;
-            new_instance.transform               = _vox_transform_identity();
-            new_instance.layer_index             = 0;
-            new_instance.name                    = 0;
-            new_instance.hidden                  = false;
-            new_instance.num_model_keyframes     = 0;
-            new_instance.model_keyframes         = NULL;
-            new_instance.num_transform_keyframes = 0;
-            new_instance.transform_keyframes     = NULL;
+            new_instance.model_index                = 0;
+            new_instance.group_index                = 0;
+            new_instance.transform                  = _vox_transform_identity();
+            new_instance.layer_index                = 0;
+            new_instance.name                       = 0;
+            new_instance.hidden                     = false;
+            clear_anim_transform(&new_instance.transform_anim);
+            clear_anim_model(&new_instance.model_anim);
             instances.push_back(new_instance);
         }
 
@@ -1740,9 +1779,9 @@
                 for (uint32_t k = 0; k < instances.size(); k++) {
                     if (instances[k].model_index == j)
                         instances[k].model_index = i;
-                    if (instances[k].num_model_keyframes) {
-                        ogt_vox_keyframe_model* keyframes = (ogt_vox_keyframe_model* )&misc_data[(size_t)instances[k].model_keyframes];
-                        for (uint32_t f = 0; f < instances[k].num_model_keyframes; f++) {
+                    if (instances[k].model_anim.num_keyframes) {
+                        ogt_vox_keyframe_model* keyframes = (ogt_vox_keyframe_model* )&misc_data[(size_t)instances[k].model_anim.keyframes];
+                        for (uint32_t f = 0; f < instances[k].model_anim.num_keyframes; f++) {
                             if (keyframes[f].model_index == j)
                                 keyframes[f].model_index = i;
                         }
@@ -1846,18 +1885,18 @@
             for (uint32_t i = 0; i < num_scene_groups; i++) {
                 if (scene_groups[i].name)
                     scene_groups[i].name = scene_misc_data + (size_t)scene_groups[i].name;
-                if (scene_groups[i].num_transform_keyframes)
-                    scene_groups[i].transform_keyframes = (const ogt_vox_keyframe_transform*)(scene_misc_data + (size_t)scene_groups[i].transform_keyframes);
+                if (scene_groups[i].transform_anim.num_keyframes)
+                    scene_groups[i].transform_anim.keyframes = (const ogt_vox_keyframe_transform*)(scene_misc_data + (size_t)scene_groups[i].transform_anim.keyframes);
             }
 
             // now patch up instance name pointers to point into the scene string area
             for (uint32_t i = 0; i < num_scene_instances; i++) {
                 if (scene_instances[i].name)
                     scene_instances[i].name = scene_misc_data + (size_t)scene_instances[i].name;
-                if (scene_instances[i].num_transform_keyframes)
-                    scene_instances[i].transform_keyframes = (const ogt_vox_keyframe_transform*)(scene_misc_data + (size_t)scene_instances[i].transform_keyframes);
-                if (scene_instances[i].num_model_keyframes)
-                    scene_instances[i].model_keyframes  = (const ogt_vox_keyframe_model*)(scene_misc_data + (size_t)scene_instances[i].model_keyframes);
+                if (scene_instances[i].transform_anim.num_keyframes)
+                    scene_instances[i].transform_anim.keyframes = (const ogt_vox_keyframe_transform*)(scene_misc_data + (size_t)scene_instances[i].transform_anim.keyframes);
+                if (scene_instances[i].model_anim.num_keyframes)
+                    scene_instances[i].model_anim.keyframes  = (const ogt_vox_keyframe_model*)(scene_misc_data + (size_t)scene_instances[i].model_anim.keyframes);
             }
 
             // now patch up layer name pointers to point into the scene string area
@@ -2002,8 +2041,7 @@
         _vox_file_write_dict_key_value(fp, "_t", t_string);
     }
 
-    static void _vox_file_write_chunk_nTRN(_vox_file_writeable* fp, uint32_t node_id, uint32_t child_node_id, const char* name, bool hidden, const ogt_vox_transform* transform, uint32_t layer_id,
-        uint32_t num_transform_keyframes, const ogt_vox_keyframe_transform* transform_keyframes)
+    static void _vox_file_write_chunk_nTRN(_vox_file_writeable* fp, uint32_t node_id, uint32_t child_node_id, const char* name, bool hidden, const ogt_vox_transform* transform, uint32_t layer_id, const ogt_vox_anim_transform* transform_anim)
     {
         // obtain dictionary string pointers
         const char* hidden_string = hidden ? "1" : NULL;
@@ -2028,18 +2066,18 @@
         _vox_file_write_uint32(fp, child_node_id);
         _vox_file_write_uint32(fp, UINT32_MAX); // reserved_id must have all bits set.
         _vox_file_write_uint32(fp, layer_id);
-        if (num_transform_keyframes == 0) {
+        if (transform_anim->num_keyframes == 0) {
             _vox_file_write_uint32(fp, 1);          // num_frames must be 1
             // write the frame dictionary
             _vox_file_write_uint32(fp, 2);  // 2 key values: "_r", "_t"
             _vox_file_write_dict_transform(fp, transform);
         }
         else {
-            _vox_file_write_uint32(fp, num_transform_keyframes);          // num_frames must be 1
-            for (uint32_t j = 0; j < num_transform_keyframes; j++) {
+            _vox_file_write_uint32(fp, transform_anim->num_keyframes);          // num_frames must be 1
+            for (uint32_t j = 0; j < transform_anim->num_keyframes; j++) {
                 _vox_file_write_uint32(fp, 3);  // 2 key values: "_r", "_t", "_f"
-                _vox_file_write_dict_transform(fp, &transform_keyframes[j].transform);
-                _vox_file_write_dict_key_value_uint32(fp, "_f", transform_keyframes[j].frame_index);
+                _vox_file_write_dict_transform(fp, &transform_anim->keyframes[j].transform);
+                _vox_file_write_dict_key_value_uint32(fp, "_f", transform_anim->keyframes[j].frame_index);
             }
         }
 
@@ -2121,7 +2159,7 @@
         // write the nTRN nodes for each of the groups in the scene.
         for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
             const ogt_vox_group* group = &scene->groups[group_index];
-            _vox_file_write_chunk_nTRN(fp, first_group_transform_node_id + group_index, first_group_node_id + group_index, group->name, group->hidden, &group->transform, group->layer_index, group->num_transform_keyframes, group->transform_keyframes);
+            _vox_file_write_chunk_nTRN(fp, first_group_transform_node_id + group_index, first_group_node_id + group_index, group->name, group->hidden, &group->transform, group->layer_index, &group->transform_anim);
         }
         // write the group nodes for each of the groups in the scene
         for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
@@ -2176,29 +2214,30 @@
             // write the nSHP chunk payload
             _vox_file_write_uint32(fp, first_shape_node_id + i);    // node_id
             _vox_file_write_uint32(fp, 0);                          // num keyvalue pairs in node dictionary
-            if (instance->num_model_keyframes == 0 ) {
+            if (instance->model_anim.num_keyframes == 0 ) {
                 _vox_file_write_uint32(fp, 1);                      // num_models must be 1
                 _vox_file_write_uint32(fp, instance->model_index);  // model_id
                 _vox_file_write_uint32(fp, 0);                      // num keyvalue pairs in model dictionary
             }
             else {
-                _vox_file_write_uint32(fp, instance->num_model_keyframes);
-                for (uint32_t j = 0; j < instance->num_model_keyframes; j++) {
-                    _vox_file_write_uint32(fp, instance->model_keyframes[j].model_index); // model_id
+                _vox_file_write_uint32(fp, instance->model_anim.num_keyframes);
+                for (uint32_t j = 0; j < instance->model_anim.num_keyframes; j++) {
+                    _vox_file_write_uint32(fp, instance->model_anim.keyframes[j].model_index); // model_id
                     _vox_file_write_uint32(fp, 1); // num keyvalue pairs in model dictionary
-                    _vox_file_write_dict_key_value_uint32(fp, "_f", instance->model_keyframes[j].frame_index);
+                    _vox_file_write_dict_key_value_uint32(fp, "_f", instance->model_anim.keyframes[j].frame_index);
                 }
             }
             // compute and patch up the chunk size in the chunk header
             uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - 12;
             _vox_file_write_at_offset(fp, offset_of_chunk_header + 4, &chunk_size, sizeof(chunk_size));
         }
+
         // write out a nTRN chunk for all instances - and make them point to the relevant nSHP chunk
         for (uint32_t i = 0; i < scene->num_instances; i++) {
             const ogt_vox_instance* instance = &scene->instances[i];
             uint32_t node_id       = first_instance_transform_node_id + i;
             uint32_t child_node_id = first_shape_node_id + i;
-            _vox_file_write_chunk_nTRN(fp, node_id, child_node_id, instance->name, instance->hidden, &instance->transform, instance->layer_index, instance->num_transform_keyframes, instance->transform_keyframes);
+            _vox_file_write_chunk_nTRN(fp, node_id, child_node_id, instance->name, instance->hidden, &instance->transform, instance->layer_index, &instance->transform_anim);
         }
 
         // write out the rCAM chunks
@@ -2577,8 +2616,7 @@
             root_group.layer_index             = 0;
             root_group.parent_group_index      = k_invalid_group_index;
             root_group.transform               = _vox_transform_identity();
-            root_group.num_transform_keyframes = 0;
-            root_group.transform_keyframes     = NULL;
+            clear_anim_transform(&root_group.transform_anim);
             groups[0] = root_group;
         }
         uint32_t num_groups = 1; // we just wrote the global root group index, so all per-scene groups are allocated after.
@@ -2646,8 +2684,8 @@
                 dst_group.parent_group_index = (dst_group.parent_group_index == 0) ? global_root_group_index : base_group_index + (dst_group.parent_group_index - 1);
                 if (dst_group.name)
                     misc_data_size += _vox_strlen(dst_group.name) + 1; // + 1 for zero terminator
-                if (dst_group.num_transform_keyframes)
-                    misc_data_size += (sizeof(ogt_vox_keyframe_transform) * dst_group.num_transform_keyframes);
+                if (dst_group.transform_anim.num_keyframes)
+                    misc_data_size += (sizeof(ogt_vox_keyframe_transform) * dst_group.transform_anim.num_keyframes);
                 // if this group belongs to the global root group, it must be translated so it doesn't overlap with other scenes.
                 if (dst_group.parent_group_index == global_root_group_index)
                     dst_group.transform.m30 += scene_offset_x;
@@ -2665,10 +2703,10 @@
                 dst_instance->model_index += base_model_index;
                 if (dst_instance->name)
                     misc_data_size += _vox_strlen(dst_instance->name) + 1; // + 1 for zero terminator
-                if (dst_instance->num_transform_keyframes)
-                    misc_data_size += (sizeof(ogt_vox_keyframe_transform) * dst_instance->num_transform_keyframes);
-                if (dst_instance->num_model_keyframes)
-                    misc_data_size += (sizeof(ogt_vox_keyframe_model) * dst_instance->num_model_keyframes);
+                if (dst_instance->transform_anim.num_keyframes)
+                    misc_data_size += (sizeof(ogt_vox_keyframe_transform) * dst_instance->transform_anim.num_keyframes);
+                if (dst_instance->model_anim.num_keyframes)
+                    misc_data_size += (sizeof(ogt_vox_keyframe_model) * dst_instance->model_anim.num_keyframes);
 
                 // if this instance belongs to the global root group, it must be translated so it doesn't overlap with other scenes.
                 if (dst_instance->group_index == global_root_group_index)
@@ -2699,25 +2737,25 @@
                     instances[instance_index].name = scene_misc_data;
                     scene_misc_data += string_len;
                 }
-                if (instances[instance_index].num_model_keyframes) {
+                if (instances[instance_index].model_anim.num_keyframes) {
                     ogt_vox_keyframe_model* model_keyframes = (ogt_vox_keyframe_model*)scene_misc_data;
-                    uint32_t keyframe_size = sizeof(ogt_vox_keyframe_model) * instances[instance_index].num_model_keyframes;
-                    memcpy(scene_misc_data, instances[instance_index].model_keyframes, keyframe_size);
-                    instances[instance_index].model_keyframes = model_keyframes;
+                    uint32_t keyframe_size = sizeof(ogt_vox_keyframe_model) * instances[instance_index].model_anim.num_keyframes;
+                    memcpy(scene_misc_data, instances[instance_index].model_anim.keyframes, keyframe_size);
+                    instances[instance_index].model_anim.keyframes = model_keyframes;
                     scene_misc_data += keyframe_size;
                     // bias the model_index in model_keyframes back into the range for the scene that this instance came from.
                     for (int32_t scene_index = (int32_t)(per_scene_base_instance_index.size() - 1); scene_index >= 0; scene_index--) {
                         if (instance_index >= per_scene_base_instance_index[scene_index]) {
-                            for (uint32_t j = 0; j < instances[instance_index].num_model_keyframes; j++)
+                            for (uint32_t j = 0; j < instances[instance_index].model_anim.num_keyframes; j++)
                                 model_keyframes[j].model_index += per_scene_base_model_index[scene_index];
                             break;
                         }
                     }
                 }
-                if (instances[instance_index].num_transform_keyframes) {
-                    uint32_t keyframe_size = sizeof(ogt_vox_keyframe_transform) * instances[instance_index].num_transform_keyframes;
-                    memcpy(scene_misc_data, instances[instance_index].transform_keyframes, keyframe_size);
-                    instances[instance_index].transform_keyframes = (ogt_vox_keyframe_transform*)scene_misc_data;
+                if (instances[instance_index].transform_anim.num_keyframes) {
+                    uint32_t keyframe_size = sizeof(ogt_vox_keyframe_transform) * instances[instance_index].transform_anim.num_keyframes;
+                    memcpy(scene_misc_data, instances[instance_index].transform_anim.keyframes, keyframe_size);
+                    instances[instance_index].transform_anim.keyframes = (ogt_vox_keyframe_transform*)scene_misc_data;
                     scene_misc_data += keyframe_size;
                 }
             }
@@ -2728,10 +2766,10 @@
                     groups[group_index].name = scene_misc_data;
                     scene_misc_data += string_len;
                 }
-                if (groups[group_index].num_transform_keyframes) {
-                    uint32_t keyframe_size = sizeof(ogt_vox_keyframe_transform) * groups[group_index].num_transform_keyframes;
-                    memcpy(scene_misc_data, groups[group_index].transform_keyframes, keyframe_size);
-                    groups[group_index].transform_keyframes = (ogt_vox_keyframe_transform*)scene_misc_data;
+                if (groups[group_index].transform_anim.num_keyframes) {
+                    uint32_t keyframe_size = sizeof(ogt_vox_keyframe_transform) * groups[group_index].transform_anim.num_keyframes;
+                    memcpy(scene_misc_data, groups[group_index].transform_anim.keyframes, keyframe_size);
+                    groups[group_index].transform_anim.keyframes = (ogt_vox_keyframe_transform*)scene_misc_data;
                     scene_misc_data += keyframe_size;
                 }
             }
