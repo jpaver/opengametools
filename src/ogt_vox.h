@@ -398,8 +398,9 @@
     void  ogt_vox_free(void* mem);
 
     // flags for ogt_vox_read_scene_with_flags
-    static const uint32_t k_read_scene_flags_groups    = 1 << 0; // if not specified, all instance transforms will be flattened into world space. If specified, will read group information and keep all transforms as local transform relative to the group they are in.
-    static const uint32_t k_read_scene_flags_keyframes = 1 << 1; // if specified, all instances and groups will contain keyframe data. 
+    static const uint32_t k_read_scene_flags_groups                      = 1 << 0; // if not specified, all instance transforms will be flattened into world space. If specified, will read group information and keep all transforms as local transform relative to the group they are in.
+    static const uint32_t k_read_scene_flags_keyframes                   = 1 << 1; // if specified, all instances and groups will contain keyframe data. 
+    static const uint32_t k_read_scene_flags_keep_empty_models_instances = 1 << 2; // if specified, all empty models and instances referencing those will be kept rather than culled.
 
     // creates a scene from a vox file within a memory buffer of a given size.
     // you can destroy the input buffer once you have the scene as this function will allocate separate memory for the scene objecvt.
@@ -1185,7 +1186,7 @@
                     // read the number of voxels to process for this moodel
                     uint32_t num_voxels_in_chunk = 0;
                     _vox_file_read(fp, &num_voxels_in_chunk, sizeof(uint32_t));
-                    if (num_voxels_in_chunk != 0) {
+                    if (num_voxels_in_chunk != 0 || (read_flags & k_read_scene_flags_keep_empty_models_instances)) {
                         uint32_t voxel_count = size_x * size_y * size_z;
                         ogt_vox_model * model = (ogt_vox_model*)_vox_calloc(sizeof(ogt_vox_model) + voxel_count);        // 1 byte for each voxel
                         if (!model)
@@ -1796,6 +1797,7 @@
         // instances that refer to empty models, but here we want to compact the model_ptrs
         // array such that it contains no more NULL models. This also requires we remap the
         // indices for instances so they continue to refer to their correct models.
+        if (0 == (read_flags & k_read_scene_flags_keep_empty_models_instances))
         {
             // first, check to see if we find any empty model. No need to do work otherwise.
             bool found_empty_model = false;
