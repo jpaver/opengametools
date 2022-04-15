@@ -330,12 +330,14 @@
     typedef struct ogt_vox_anim_transform {
         const ogt_vox_keyframe_transform* keyframes;
         uint32_t                          num_keyframes;
+        bool                              loop;
     } ogt_vox_anim_transform;
 
     // an animated model
     typedef struct ogt_vox_anim_model {
         const ogt_vox_keyframe_model* keyframes;
         uint32_t                      num_keyframes;
+        bool                          loop;
     } ogt_vox_anim_model;
 
     // an instance of a model within the scene
@@ -911,7 +913,7 @@
                 bool              hidden;
                 uint32_t          num_keyframes;           // number of key frames in this transform
                 size_t            keyframe_offset;         // offset in misc_data array where the _vox_keyframe_transform data is stored.
-
+                bool              loop;                    // keyframes are marked as looping
             } transform;
             // used only when node_type == k_nodetype_group
             struct {
@@ -920,21 +922,24 @@
             } group;
             // used only when node_type == k_nodetype_shape
             struct {
-                uint32_t model_id;                  // always the first model_id in the case of an animated shape
+                uint32_t model_id;                 // always the first model_id in the case of an animated shape
                 uint32_t num_keyframes;            // number of key frames in this transform
                 size_t   keyframe_offset;          // offset in misc_data array where the _vox_keyframe_shape data is stored
+                bool     loop;                     // keyframes are marked as looping
             } shape;
         } u;
     };
 
     static void clear_anim_transform(ogt_vox_anim_transform* anim) {
         anim->num_keyframes = 0;
-        anim->keyframes = NULL;
+        anim->keyframes     = NULL;
+        anim->loop          = false;
     }
 
     static void clear_anim_model(ogt_vox_anim_model* anim) {
         anim->num_keyframes = 0;
-        anim->keyframes = NULL;
+        anim->keyframes     = NULL;
+        anim->loop          = false;
     }
 
     static void generate_instances_for_node(
@@ -976,6 +981,7 @@
                     if (generate_keyframes) {
                         group.transform_anim.num_keyframes = last_transform->u.transform.num_keyframes;
                         group.transform_anim.keyframes     = (const ogt_vox_keyframe_transform*)(last_transform->u.transform.keyframe_offset);
+                        group.transform_anim.loop          = last_transform->u.transform.loop;
                     }
                     groups.push_back(group);
                 }
@@ -1020,8 +1026,10 @@
                     if (generate_keyframes) {
                         new_instance.model_anim.num_keyframes     = node->u.shape.num_keyframes;
                         new_instance.model_anim.keyframes         = (const ogt_vox_keyframe_model*)(node->u.shape.keyframe_offset);
+                        new_instance.model_anim.loop              = node->u.shape.loop;
                         new_instance.transform_anim.num_keyframes = last_transform->u.transform.num_keyframes;
                         new_instance.transform_anim.keyframes     = (const ogt_vox_keyframe_transform*)(last_transform->u.transform.keyframe_offset);
+                        new_instance.transform_anim.loop          = last_transform->u.transform.loop;
                     }
 
                     // create the instance
@@ -1243,6 +1251,7 @@
                     //   _hidden: 0/1
                     char node_name[65];
                     bool hidden = false;
+                    bool loop = false;
                     node_name[0] = 0;
                     {
                         _vox_file_read_dict(&dict, fp);
@@ -1253,6 +1262,9 @@
                         const char* hidden_string = _vox_dict_get_value_as_string(&dict, "_hidden", "0");
                         if (hidden_string)
                             hidden = (hidden_string[0] == '1' ? true : false);
+                        const char* loop_string = _vox_dict_get_value_as_string(&dict, "_loop", "0");
+                        if (loop_string)
+                            loop = (loop_string[0] == '1' ? true : false);
                     }
 
 
@@ -1291,6 +1303,7 @@
                         transform_node->u.transform.hidden          = hidden;
                         transform_node->u.transform.num_keyframes   = num_frames;
                         transform_node->u.transform.keyframe_offset = keyframe_offset;
+                        transform_node->u.transform.loop            = loop;
                         _vox_strcpy_static(transform_node->u.transform.name, node_name);
                     }
                     break;
@@ -1330,8 +1343,14 @@
                     uint32_t node_id = 0;
                     _vox_file_read(fp, &node_id, sizeof(node_id));
 
-                    // parse the node dictionary - data is unused.
-                    _vox_file_read_dict(&dict, fp);
+                    // parse the node dictionary
+                    bool loop = false;
+                    {
+                        _vox_file_read_dict(&dict, fp);
+                        const char* loop_string = _vox_dict_get_value_as_string(&dict, "_loop", "0");
+                        if (loop_string)
+                            loop = (loop_string[0] == '1' ? true : false);
+                    }
 
                     uint32_t num_models = 0;
                     _vox_file_read(fp, &num_models, sizeof(num_models));
@@ -1357,6 +1376,7 @@
                     shape_node->u.shape.model_id        = keyframes[0].model_index;
                     shape_node->u.shape.num_keyframes   = num_models;
                     shape_node->u.shape.keyframe_offset = keyframe_offset;
+                    shape_node->u.shape.loop            = loop;
                     break;
                 }
                 case CHUNK_ID_IMAP:
@@ -2047,6 +2067,7 @@
     {
         // obtain dictionary string pointers
         const char* hidden_string = hidden ? "1" : NULL;
+        const char* loop_string   = transform_anim->loop ? "1" : NULL;
 
         uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
 
@@ -2059,10 +2080,11 @@
         _vox_file_write_uint32(fp, node_id);
 
         // write the node dictionary
-        uint32_t node_dict_keyvalue_count = (name ? 1 : 0) + (hidden_string ? 1 : 0);
+        uint32_t node_dict_keyvalue_count = (name ? 1 : 0) + (hidden_string ? 1 : 0) + (loop_string ? 1 : 0);
         _vox_file_write_uint32(fp, node_dict_keyvalue_count);  // num key values
-        _vox_file_write_dict_key_value(fp, "_name", name);
+        _vox_file_write_dict_key_value(fp, "_name",   name);
         _vox_file_write_dict_key_value(fp, "_hidden", hidden_string);
+        _vox_file_write_dict_key_value(fp, "_loop",   loop_string);
 
         // get other properties.
         _vox_file_write_uint32(fp, child_node_id);
@@ -2215,7 +2237,13 @@
             _vox_file_write_uint32(fp, 0);
             // write the nSHP chunk payload
             _vox_file_write_uint32(fp, first_shape_node_id + i);    // node_id
-            _vox_file_write_uint32(fp, 0);                          // num keyvalue pairs in node dictionary
+
+            // write the nSHP node dictionary
+            const char* loop_string = instance->model_anim.loop ? "1" : NULL;
+            uint32_t node_dict_keyvalue_count = (loop_string ? 1 : 0);
+            _vox_file_write_uint32(fp, node_dict_keyvalue_count);  // num key values
+            _vox_file_write_dict_key_value(fp, "_loop",   loop_string);
+
             if (instance->model_anim.num_keyframes == 0 ) {
                 _vox_file_write_uint32(fp, 1);                      // num_models must be 1
                 _vox_file_write_uint32(fp, instance->model_index);  // model_id
