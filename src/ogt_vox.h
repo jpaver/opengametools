@@ -1624,6 +1624,7 @@
                         flattened_transform = _vox_transform_multiply(flattened_transform, groups[group_index].transform);
                         group_index = groups[group_index].parent_group_index;
                     }
+                    instance->transform = flattened_transform;
                     instance->group_index = 0;
                 }
                 // add just a single parent group.
