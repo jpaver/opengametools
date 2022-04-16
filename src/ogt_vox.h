@@ -326,7 +326,7 @@
         uint32_t model_index;
     } ogt_vox_keyframe_model;
 
-    // an animated transform 
+    // an animated transform
     typedef struct ogt_vox_anim_transform {
         const ogt_vox_keyframe_transform* keyframes;
         uint32_t                          num_keyframes;
@@ -401,7 +401,7 @@
 
     // flags for ogt_vox_read_scene_with_flags
     static const uint32_t k_read_scene_flags_groups                      = 1 << 0; // if not specified, all instance transforms will be flattened into world space. If specified, will read group information and keep all transforms as local transform relative to the group they are in.
-    static const uint32_t k_read_scene_flags_keyframes                   = 1 << 1; // if specified, all instances and groups will contain keyframe data. 
+    static const uint32_t k_read_scene_flags_keyframes                   = 1 << 1; // if specified, all instances and groups will contain keyframe data.
     static const uint32_t k_read_scene_flags_keep_empty_models_instances = 1 << 2; // if specified, all empty models and instances referencing those will be kept rather than culled.
 
     // creates a scene from a vox file within a memory buffer of a given size.
@@ -709,7 +709,7 @@
                     return i;
                 if (data[i] >= value) {
                     resize(count+1);
-                    for (size_t j = count-1; j > i; j--) 
+                    for (size_t j = count-1; j > i; j--)
                         data[j] = data[j-1];
                     data[i] = value;
                     return i;
@@ -1856,7 +1856,7 @@
                         }
                     }
                 }
-                    
+
             }
         }
 
@@ -2070,7 +2070,7 @@
         fp->data.push_back_many((const uint8_t*)&data, sizeof(uint8_t));
     }
     static void _vox_file_write_at_offset(_vox_file_writeable* fp, uint32_t offset, const void* data, uint32_t data_size) {
-        ogt_assert((offset + data_size) <= fp->data.count, "write at offset must not be an append write"); 
+        ogt_assert((offset + data_size) <= fp->data.count, "write at offset must not be an append write");
         memcpy(&fp->data[offset], data, data_size);
     }
     static uint32_t _vox_file_get_offset(const _vox_file_writeable* fp) {
@@ -2342,7 +2342,7 @@
             }
 
             uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
-            
+
             // write the rCAM header
             _vox_file_write_uint32(fp, CHUNK_ID_rCAM);
             _vox_file_write_uint32(fp, 0); // chunk_size will get patched up later
@@ -2804,7 +2804,7 @@
         size_t scene_size = sizeof(ogt_vox_scene) + misc_data_size;
         ogt_vox_scene * merged_scene = (ogt_vox_scene*)_vox_calloc(scene_size);
 
-        // copy name and keyframe data into the misc_data section and make instances/groups point to it. 
+        // copy name and keyframe data into the misc_data section and make instances/groups point to it.
         // This makes the merged model self-contained.
         {
             char* scene_misc_data = (char*)&merged_scene[1];
