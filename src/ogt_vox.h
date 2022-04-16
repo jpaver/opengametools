@@ -829,6 +829,22 @@
         return default_value;
     }
 
+    static bool _vox_dict_get_value_as_bool(const _vox_dictionary* dict, const char* key_to_find, bool default_value) {
+        const char* str = _vox_dict_get_value_as_string(dict, key_to_find, NULL);
+        if (!str)
+            return default_value;
+        return str[0] == '1' ? true : false;
+    }
+
+    static uint32_t _vox_dict_get_value_as_uint32(const _vox_dictionary* dict, const char* key_to_find, uint32_t default_value) {
+        const char* str = _vox_dict_get_value_as_string(dict, key_to_find, NULL);
+        if (!str)
+            return default_value;
+        uint32_t value;
+        _vox_str_scanf(str, "%i", &value);
+        return value;
+    }
+
     // lookup table for _vox_make_transform_from_dict_strings
     static const vec3 k_vectors[4] = {
     vec3_make(1.0f, 0.0f, 0.0f),
@@ -1297,24 +1313,12 @@
                     // Parse the node dictionary, which can contain:
                     //   _name:   string
                     //   _hidden: 0/1
+                    //   _loop:   0/1
+                    _vox_file_read_dict(&dict, fp);
                     char node_name[65];
-                    bool hidden = false;
-                    bool loop = false;
-                    node_name[0] = 0;
-                    {
-                        _vox_file_read_dict(&dict, fp);
-                        const char* name_string = _vox_dict_get_value_as_string(&dict, "_name");
-                        if (name_string)
-                            _vox_strcpy_static(node_name, name_string);
-                        // if we got a hidden attribute - assign it now.
-                        const char* hidden_string = _vox_dict_get_value_as_string(&dict, "_hidden", "0");
-                        if (hidden_string)
-                            hidden = (hidden_string[0] == '1' ? true : false);
-                        const char* loop_string = _vox_dict_get_value_as_string(&dict, "_loop", "0");
-                        if (loop_string)
-                            loop = (loop_string[0] == '1' ? true : false);
-                    }
-
+                    _vox_strcpy_static(node_name, _vox_dict_get_value_as_string(&dict, "_name", ""));
+                    bool hidden = _vox_dict_get_value_as_bool(&dict, "_hidden", false);
+                    bool loop = _vox_dict_get_value_as_bool(&dict, "_loop", false);
 
                     // get other properties.
                     uint32_t child_node_id = 0, reserved_id = 0, layer_id = 0, num_frames = 0;
@@ -1336,9 +1340,8 @@
                         _vox_file_read_dict(&dict, fp);
                         const char* rotation_value    = _vox_dict_get_value_as_string(&dict, "_r");
                         const char* translation_value = _vox_dict_get_value_as_string(&dict, "_t");
-                        const char* frame_value       = _vox_dict_get_value_as_string(&dict, "_f", "0");
-                        keyframes[ i ].transform     = _vox_make_transform_from_dict_strings(rotation_value, translation_value);
-                        _vox_str_scanf(frame_value, "%i", &keyframes[ i ].frame_index);
+                        keyframes[ i ].transform      = _vox_make_transform_from_dict_strings(rotation_value, translation_value);
+                        keyframes[i].frame_index      = _vox_dict_get_value_as_uint32(&dict, "_f", 0);
                     }
                     // setup the transform node.
                     {
@@ -1392,13 +1395,8 @@
                     _vox_file_read(fp, &node_id, sizeof(node_id));
 
                     // parse the node dictionary
-                    bool loop = false;
-                    {
-                        _vox_file_read_dict(&dict, fp);
-                        const char* loop_string = _vox_dict_get_value_as_string(&dict, "_loop", "0");
-                        if (loop_string)
-                            loop = (loop_string[0] == '1' ? true : false);
-                    }
+                    _vox_file_read_dict(&dict, fp);
+                    bool loop = _vox_dict_get_value_as_bool(&dict, "_loop", false);
 
                     uint32_t num_models = 0;
                     _vox_file_read(fp, &num_models, sizeof(num_models));
@@ -1413,8 +1411,7 @@
                         ogt_assert(keyframes[i].model_index < model_ptrs.size(), "nSHP chunk references model_id that we have not loaded yet");
                         // read frame id
                         _vox_file_read_dict(&dict, fp);
-                        const char* frame_value = _vox_dict_get_value_as_string(&dict, "_f", "0");
-                        _vox_str_scanf(frame_value, "%i", &keyframes[i].frame_index);
+                        keyframes[i].frame_index = _vox_dict_get_value_as_uint32(&dict, "_f", 0);
                     }
 
                     // setup the shape node
@@ -1455,10 +1452,7 @@
                         size_t name_size = _vox_strlen(name_string) + 1;       // +1 for terminator
                         misc_data.push_back_many(name_string, name_size);
                     }
-                    // if we got a hidden attribute - assign it now.
-                    const char* hidden_string = _vox_dict_get_value_as_string(&dict, "_hidden", "0");
-                    if (hidden_string)
-                        layers[layer_id].hidden = (hidden_string[0] == '1' ? true : false);
+                    layers[layer_id].hidden = _vox_dict_get_value_as_bool(&dict, "_hidden", false);
                     break;
                 }
                 case CHUNK_ID_MATL:
