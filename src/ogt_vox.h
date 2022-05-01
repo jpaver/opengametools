@@ -356,8 +356,9 @@
     // describes a layer within the scene
     typedef struct ogt_vox_layer
     {
-        const char* name;               // name of this layer if there is one, will be NULL otherwise.
-        bool        hidden;             // whether this layer is hidden or not.
+        const char*  name;               // name of this layer if there is one, will be NULL otherwise.
+        ogt_vox_rgba color;              // color of the layer.
+        bool         hidden;             // whether this layer is hidden or not.
     } ogt_vox_layer;
 
     // describes a group within the scene
@@ -1441,7 +1442,8 @@
                     ogt_assert(reserved_id == -1, "unexpected value for reserved_id in LAYR chunk");
 
                     layers.grow_to_fit_index(layer_id);
-                    layers[layer_id].name = NULL;
+                    layers[layer_id].name   = NULL;
+                    layers[layer_id].color = {255, 255, 255, 255};
                     layers[layer_id].hidden = false;
 
                     // if we got a layer name from the LAYR dictionary, allocate space in misc_data for it and keep track of the index
@@ -1453,6 +1455,16 @@
                         misc_data.push_back_many(name_string, name_size);
                     }
                     layers[layer_id].hidden = _vox_dict_get_value_as_bool(&dict, "_hidden", false);
+
+                    const char* color_string = _vox_dict_get_value_as_string(&dict, "_color", NULL);
+                    if (color_string) {
+                        uint32_t r,g,b;
+                        _vox_str_scanf(color_string, "%u %u %u", &r, &g, &b);
+                        layers[layer_id].color.r = (uint8_t)r;
+                        layers[layer_id].color.g = (uint8_t)g;
+                        layers[layer_id].color.b = (uint8_t)b;
+                    }
+
                     break;
                 }
                 case CHUNK_ID_MATL:
@@ -2457,9 +2469,11 @@
 
         // write all layer chunks out.
         for (uint32_t i = 0; i < scene->num_layers; i++) {
+            char color_string[64];
+            _vox_sprintf(color_string, sizeof(color_string), "%u %u %u", scene->layers[i].color.r, scene->layers[i].color.g, scene->layers[i].color.b);
             const char* layer_name_string = scene->layers[i].name;
             const char* hidden_string = scene->layers[i].hidden ? "1" : NULL;
-            uint32_t layer_dict_keyvalue_count = (layer_name_string ? 1 : 0) + (hidden_string ? 1 : 0);
+            uint32_t layer_dict_keyvalue_count = (layer_name_string ? 1 : 0) + (hidden_string ? 1 : 0) + (color_string ? 1 : 0);
 
             uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
 
@@ -2472,6 +2486,7 @@
             _vox_file_write_uint32(fp, layer_dict_keyvalue_count);  // num keyvalue pairs in layer dictionary
             _vox_file_write_dict_key_value(fp, "_name",   layer_name_string);
             _vox_file_write_dict_key_value(fp, "_hidden", hidden_string);
+            _vox_file_write_dict_key_value(fp, "_color",  color_string);
             _vox_file_write_uint32(fp, UINT32_MAX);                 // reserved id
 
             // compute and patch up the chunk size in the chunk header
@@ -2674,6 +2689,7 @@
 
         // add a single layer.
         layers[num_layers].hidden = false;
+        layers[num_layers].color  = {255, 255, 255, 255};
         layers[num_layers].name = "merged";
         num_layers++;
 
