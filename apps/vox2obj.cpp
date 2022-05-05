@@ -322,6 +322,11 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
                     continue;
 
                 if (voxel_scale != 1.0f) {
+                    // bake voxel scale into the transform to avoid doing the scale per vertex.
+                    float* transform_data = &transform.m00;
+                    for (size_t i = 0; i < 16; i++) {
+                        transform_data[i] *= voxel_scale;
+                    }
                     // scaling vertex positions, so we do floating point writes
                     for (size_t i = 0; i < mesh->vertex_count; i++) {
                         ogt_mesh_vec3 pos = transform_point(transform, mesh->vertices[i].pos);
