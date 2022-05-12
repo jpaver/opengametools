@@ -98,7 +98,7 @@ void print_help() {
     );
 }
 
-bool write_mesh_to_fbx(const char* output_filename, const ogt_mesh* mesh, const char* mesh_name)
+bool write_mesh_to_fbx(const char* output_filename, const ogt_mesh* mesh, const ogt_vox_palette* palette, const char* mesh_name)
 {
 #if defined(_MSC_VER) && _MSC_VER >= 1400  
     FILE* fout = NULL;
@@ -209,9 +209,10 @@ bool write_mesh_to_fbx(const char* output_filename, const ogt_mesh* mesh, const 
         );
         for (uint32_t i = 0; i < mesh->index_count; i++) {
             uint32_t index = mesh->indices[i];
-            float r = (mesh->vertices[index].color.r / 255.0f);
-            float g = (mesh->vertices[index].color.g / 255.0f);
-            float b = (mesh->vertices[index].color.b / 255.0f);
+            const ogt_vox_rgba* color = &palette->color[mesh->vertices[index].color_index];
+            float r = (color->r / 255.0f);
+            float g = (color->g / 255.0f);
+            float b = (color->b / 255.0f);
             float a = 1.0f;
             // palette color
             fprintf(fout, "%s%f,%f,%f,%f", ((i > 0) ? "," : ""), r, g, b, a);
@@ -264,7 +265,6 @@ int32_t main(int32_t argc, char** argv) {
 
     // default parameter values
     const char* mesh_algorithm = "polygon";
-    const char* out_dir        = NULL;
     bool named_models_only     = false;
     bool y_as_up               = false;
 
@@ -371,9 +371,9 @@ int32_t main(int32_t argc, char** argv) {
             ogt_voxel_meshify_context ctx;
             memset(&ctx, 0, sizeof(ctx));
             ogt_mesh* mesh =
-                (strcmp(mesh_algorithm, "polygon") == 0) ? ogt_mesh_from_paletted_voxels_polygon(&ctx, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)& scene->palette.color[0]) :
-                (strcmp(mesh_algorithm, "greedy") == 0) ? ogt_mesh_from_paletted_voxels_greedy(&ctx, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)& scene->palette.color[0]) :
-                (strcmp(mesh_algorithm, "simple") == 0) ? ogt_mesh_from_paletted_voxels_simple(&ctx, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)& scene->palette.color[0]) :
+                (strcmp(mesh_algorithm, "polygon") == 0) ? ogt_mesh_from_indexed_voxels_polygon(&ctx, model->voxel_data, model->size_x, model->size_y, model->size_z) :
+                (strcmp(mesh_algorithm, "greedy") == 0) ? ogt_mesh_from_indexed_voxels_greedy(&ctx, model->voxel_data, model->size_x, model->size_y, model->size_z) :
+                (strcmp(mesh_algorithm, "simple") == 0) ? ogt_mesh_from_indexed_voxels_simple(&ctx, model->voxel_data, model->size_x, model->size_y, model->size_z) :
                 NULL;
             if (!mesh) {
                 printf("ERROR: could not create mesh using mesh_algorithm '%s' aborting!\n", mesh_algorithm);
@@ -410,7 +410,7 @@ int32_t main(int32_t argc, char** argv) {
                 }
             }
 
-            if (!write_mesh_to_fbx(output_filename, mesh, model_name)) {
+            if (!write_mesh_to_fbx(output_filename, mesh, &scene->palette, model_name)) {
                 printf("ERROR: could not open file '%s' for write - aborting!", output_filename);
                 return 6;
             }

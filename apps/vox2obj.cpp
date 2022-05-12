@@ -292,9 +292,9 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
                     // generate a mesh for this model using the mesh_algorithm specified
                     printf("  - generating mesh for model of size %u x %u x %u using mesh_algorithm %s\n", model->size_x, model->size_y, model->size_z, mesh_algorithm);
                     ogt_mesh* mesh = 
-                        (strcmp(mesh_algorithm, "polygon") == 0) ? ogt_mesh_from_paletted_voxels_polygon(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)&palette.color[0]) :
-                        (strcmp(mesh_algorithm, "greedy") == 0) ? ogt_mesh_from_paletted_voxels_greedy(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)&palette.color[0]) :
-                        (strcmp(mesh_algorithm, "simple") == 0) ? ogt_mesh_from_paletted_voxels_simple(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)&palette.color[0]) :
+                        (strcmp(mesh_algorithm, "polygon") == 0) ? ogt_mesh_from_indexed_voxels_polygon(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z) :
+                        (strcmp(mesh_algorithm, "greedy") == 0) ? ogt_mesh_from_indexed_voxels_greedy(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z) :
+                        (strcmp(mesh_algorithm, "simple") == 0) ? ogt_mesh_from_indexed_voxels_simple(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z) :
                         NULL;
 
                     for (uint32_t i = 0; i < mesh->vertex_count; i++) {
@@ -345,9 +345,9 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
                     uint32_t v_i0 = base_vertex_index + mesh->indices[i + 0] + 1;
                     uint32_t v_i1 = base_vertex_index + mesh->indices[i + 1] + 1;
                     uint32_t v_i2 = base_vertex_index + mesh->indices[i + 2] + 1;
-                    uint32_t t_i0 = mesh->vertices[mesh->indices[i+0]].color.a + 1;
-                    uint32_t t_i1 = mesh->vertices[mesh->indices[i+1]].color.a + 1;
-                    uint32_t t_i2 = mesh->vertices[mesh->indices[i+2]].color.a + 1;
+                    uint32_t t_i0 = mesh->vertices[mesh->indices[i+0]].color_index + 1;
+                    uint32_t t_i1 = mesh->vertices[mesh->indices[i+1]].color_index + 1;
+                    uint32_t t_i2 = mesh->vertices[mesh->indices[i+2]].color_index + 1;
                     uint32_t n_i0 = *((uint32_t*)&mesh->vertices[mesh->indices[i+0]].normal.x) + 1;
                     uint32_t n_i1 = *((uint32_t*)&mesh->vertices[mesh->indices[i+1]].normal.x) + 1;
                     uint32_t n_i2 = *((uint32_t*)&mesh->vertices[mesh->indices[i+2]].normal.x) + 1;
