@@ -183,9 +183,10 @@ bool write_mesh_to_fbx(const char* output_filename, const ogt_mesh* mesh, const 
             "\t\t\tNormals: "
         );
         for (uint32_t i = 0; i < mesh->vertex_count; i++) {
-            float x = mesh->vertices[i].normal.x;
-            float y = mesh->vertices[i].normal.y;
-            float z = mesh->vertices[i].normal.z;
+            const ogt_mesh_vec3* normal = &mesh->normals[mesh->vertices[i].normal_index];
+            float x = normal->x;
+            float y = normal->y;
+            float z = normal->z;
             // palette color
             fprintf(fout, "%s%f,%f,%f", ((i > 0) ? "," : ""), x, y, z);
         }
@@ -403,10 +404,12 @@ int32_t main(int32_t argc, char** argv) {
                     mesh->vertices[i].pos.x = -old_pos.x;
                     mesh->vertices[i].pos.y = old_pos.z;
                     mesh->vertices[i].pos.z = old_pos.y;
-                    ogt_mesh_vec3 old_normal = mesh->vertices[i].normal;
-                    mesh->vertices[i].normal.x = -old_normal.x;
-                    mesh->vertices[i].normal.y = old_normal.z;
-                    mesh->vertices[i].normal.z = old_normal.y;
+                }
+                for (uint32_t i = 0; i < mesh->normal_count; i++) {
+                    ogt_mesh_vec3 old_normal = mesh->normals[mesh->vertices[i].normal_index];
+                    mesh->normals[i].x = -old_normal.x;
+                    mesh->normals[i].y = old_normal.z;
+                    mesh->normals[i].z = old_normal.y;
                 }
             }
 

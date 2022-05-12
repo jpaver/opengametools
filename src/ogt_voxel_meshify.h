@@ -27,6 +27,7 @@
         // your own engine's layout.
 
         const uint32_t* palette = color_palette;        // each 32-bit color is 8-bits of R,G,B,A respectively.
+        const ogt_mesh_vec3* normals = mesh->normals;
         glBegin(GL_TRIANGLES);
         for (uint32_t i = 0; i < mesh->index_count; i+=3)
         {
@@ -37,13 +38,13 @@
           const ogt_mesh_vertex* v1 = &mesh->vertices[i1];
           const ogt_mesh_vertex* v2 = &mesh->vertices[i2];
           glColor4ubv(&palette[v0->color_index]);
-          glNormal3fv(&v0->normal);
+          glNormal3fv(&normals[v0->normal_index]);
           glVertex3fv(&v0->pos);
           glColor4ubv(&palette[v1->color_index]);
-          glNormal3fv(&v1->normal);
+          glNormal3fv(&normals[v1->normal_index]);
           glVertex3fv(&v1->pos);
           glColor4ubv(&palette[v2->color_index]);
-          glNormal3fv(&v2->normal);
+          glNormal3fv(&normals[v2->normal_index]);
           glVertex3fv(&v2->pos);
         }
         glEnd();
@@ -107,17 +108,19 @@ struct ogt_mesh_vec3
 struct ogt_mesh_vertex
 {
     ogt_mesh_vec3  pos;
-    ogt_mesh_vec3  normal;
+    uint32_t       normal_index;    // index within the ogt_mesh::normals array
     uint8_t        color_index;     // color index
 };
 
 // a mesh that contains an indexed triangle list of vertices
 struct ogt_mesh 
 {
-    uint32_t         vertex_count;	// number of vertices
-    uint32_t         index_count;	// number of indices
+    uint32_t         vertex_count;	// number of vertices in the vertices array
+    uint32_t         index_count;	// number of indices in the indices array
+    uint32_t         normal_count;  // number of normals in the normals array
     ogt_mesh_vertex* vertices;		// array of vertices
     uint32_t*        indices;		// array of indices
+    ogt_mesh_vec3*   normals;       // array of normals
 };
 
 // allocate memory function interface. pass in size, and get a pointer to memory with at least that size available.
@@ -127,6 +130,7 @@ typedef void* (*ogt_voxel_meshify_alloc_func)(size_t size, void* user_data);
 typedef void  (*ogt_voxel_meshify_free_func)(void* ptr, void* user_data);
 
 // stream function can receive a batch of triangles for each voxel processed by ogt_stream_from_indexed_voxels_simple. (i,j,k) 
+// NOTE: implementers of the streaming function can use ogt_mesh_get_default_normals() to convert from a vertex normal_index into a a vertex normal.
 typedef void (*ogt_voxel_simple_stream_func)(uint32_t x, uint32_t y, uint32_t z, const ogt_mesh_vertex* vertices, uint32_t vertex_count, const uint32_t* indices, uint32_t index_count, void* user_data);
 
 // a context that allows you to override various internal operations of the below api functions.
@@ -162,11 +166,13 @@ void	  ogt_mesh_remove_duplicate_vertices(const ogt_voxel_meshify_context* ctx, 
 void      ogt_mesh_smooth_normals(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh);
 
 // destroys the mesh returned by ogt_mesh_from_indexed_voxels* functions.
-void      ogt_mesh_destroy(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh );
+void      ogt_mesh_destroy(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh);
     
 // The simple stream function will stream geometry for the specified voxel field, to the specified stream function, which will be invoked on each voxel that requires geometry. 
 void     ogt_stream_from_indexed_voxels_simple(const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z, ogt_voxel_simple_stream_func stream_func, void* stream_func_data);
 
+// returns an array of default normals of size 6.
+ogt_mesh_vec3 ogt_mesh_get_default_normal(uint32_t normal_index);
 
 #endif // OGT_VOXEL_MESHIFY_H__
 
@@ -295,16 +301,36 @@ static inline ogt_mesh_vec3 _normalize3(const ogt_mesh_vec3 & a) {
     return ret;
 }
 
-static inline ogt_mesh_vertex _mesh_make_vertex(const ogt_mesh_vec3& pos, const ogt_mesh_vec3& normal, uint8_t color_index) {
+static const uint32_t k_default_normal_pos_x = 0;
+static const uint32_t k_default_normal_neg_x = 1;
+static const uint32_t k_default_normal_pos_y = 2;
+static const uint32_t k_default_normal_neg_y = 3;
+static const uint32_t k_default_normal_pos_z = 4;
+static const uint32_t k_default_normal_neg_z = 5;
+
+// default normals
+ogt_mesh_vec3 ogt_mesh_get_default_normal(uint32_t normal_index) {
+    static const ogt_mesh_vec3 defaults[] = {
+        _make_vec3( 1.0f, 0.0f, 0.0f),
+        _make_vec3(-1.0f, 0.0f, 0.0f),
+        _make_vec3( 0.0f, 1.0f, 0.0f),
+        _make_vec3( 0.0f,-1.0f, 0.0f),
+        _make_vec3( 0.0f, 0.0f, 1.0f),
+        _make_vec3( 0.0f, 0.0f,-1.0f),
+    };
+    return defaults[normal_index];
+}
+
+static inline ogt_mesh_vertex _mesh_make_vertex(const ogt_mesh_vec3& pos, uint32_t normal_index, uint8_t color_index) {
     ogt_mesh_vertex ret;
-    ret.pos         = pos;
-    ret.normal      = normal;
-    ret.color_index = color_index;
+    ret.pos          = pos;
+    ret.normal_index = normal_index;
+    ret.color_index  = color_index;
     return ret;
 }
 
-static inline ogt_mesh_vertex _mesh_make_vertex(float pos_x, float pos_y, float pos_z, float normal_x, float normal_y, float normal_z, uint8_t color_index) {
-    return _mesh_make_vertex(_make_vec3(pos_x, pos_y, pos_z), _make_vec3(normal_x, normal_y, normal_z), color_index);
+static inline ogt_mesh_vertex _mesh_make_vertex(float pos_x, float pos_y, float pos_z, uint32_t normal_index, uint8_t color_index) {
+    return _mesh_make_vertex(_make_vec3(pos_x, pos_y, pos_z), normal_index, color_index);
 }
 
 // counts the number of voxel sized faces that are needed for this voxel grid.
@@ -466,6 +492,11 @@ void ogt_mesh_remove_duplicate_vertices(const ogt_voxel_meshify_context* ctx, og
 
 // resets normals for the mesh so they are based on triangle connectivity, while preserving triangle colors.
 void ogt_mesh_smooth_normals(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh) {
+    ogt_mesh_vec3* old_normals = mesh->normals;
+
+    // we'll have a new normal for each vertex after this point.
+    ogt_mesh_vec3* new_normals = (ogt_mesh_vec3*)_voxel_meshify_malloc(ctx, sizeof(ogt_mesh_vec3) * mesh->vertex_count);
+
     // generate an remap table for vertex indices based on the vertex positions.
     uint32_t* remap_indices = (uint32_t*)_voxel_meshify_malloc(ctx, sizeof(uint32_t) * mesh->vertex_count);
     memset(remap_indices, -1, mesh->vertex_count * sizeof(uint32_t));
@@ -518,11 +549,23 @@ void ogt_mesh_smooth_normals(const ogt_voxel_meshify_context* ctx, ogt_mesh* mes
         remap_normals[ri2] = _add3(remap_normals[ri2], normal);
     }
 
-    // for each vertex, copy over remap normal if it's non-zero.
+    // for each vertex, copy over remap normal if it's non-zero, otherwise keep the old normal.
     for (uint32_t vertex_index = 0; vertex_index < mesh->vertex_count; vertex_index++) {
         ogt_mesh_vec3 accumulated_normal = remap_normals[remap_indices[vertex_index]];
-        if (_dot3(accumulated_normal, accumulated_normal) > 0.001f)
-            mesh->vertices[vertex_index].normal = _normalize3(accumulated_normal);
+        if (_dot3(accumulated_normal, accumulated_normal) > 0.001f) {
+            new_normals[vertex_index] = _normalize3(accumulated_normal);
+        }
+        else {
+            new_normals[vertex_index] = old_normals[mesh->vertices[vertex_index].normal_index];
+        }
+        mesh->vertices[vertex_index].normal_index = vertex_index;
+    }
+    mesh->normal_count = mesh->vertex_count;
+    mesh->normals      = new_normals;
+
+    // free old normals if necessary
+    if ((void*)old_normals != (void*)&mesh[1]) {
+        _voxel_meshify_free(ctx, old_normals);
     }
 
     _voxel_meshify_free(ctx, remap_normals);
@@ -543,8 +586,31 @@ static void _streaming_add_to_mesh(uint32_t x, uint32_t y, uint32_t z, const ogt
 // returns the number of quad faces that would be generated by tessellating the specified voxel field using the simple algorithm.
 uint32_t ogt_face_count_from_indexed_voxels_simple(const uint8_t* voxels, uint32_t size_x, uint32_t size_y, uint32_t size_z)
 {
-    return _count_voxel_sized_faces( voxels, size_x, size_y, size_z );
+    return _count_voxel_sized_faces(voxels, size_x, size_y, size_z);
 }
+
+ogt_mesh* ogt_mesh_alloc_default(const ogt_voxel_meshify_context* ctx, uint32_t max_vertex_count, uint32_t max_index_count)
+{
+    uint32_t max_normal_count = 6;
+    uint32_t mesh_size = sizeof(ogt_mesh) + (max_normal_count * sizeof(ogt_mesh_vec3)) + (max_vertex_count * sizeof(ogt_mesh_vertex)) + (max_index_count * sizeof(uint32_t));
+    ogt_mesh* mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
+    if (!mesh)
+        return NULL;
+    
+    mesh->normals  = (ogt_mesh_vec3*)&mesh[1];
+    mesh->vertices = (ogt_mesh_vertex*)(mesh->normals + max_normal_count);
+    mesh->indices  = (uint32_t*)(mesh->vertices + max_vertex_count);
+    mesh->vertex_count = 0;
+    mesh->index_count  = 0;
+    mesh->normal_count = max_normal_count;
+
+    assert(mesh->normal_count == 6);
+    for (uint32_t i = 0; i < 6; i++) {
+        mesh->normals[i] =  ogt_mesh_get_default_normal(i);
+    }
+    return mesh;
+}
+
 
 // constructs and returns a mesh from the specified voxel grid with no optimization to the geometry.
 ogt_mesh* ogt_mesh_from_indexed_voxels_simple(
@@ -555,16 +621,10 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_simple(
     uint32_t max_vertex_count = max_face_count * 4;
     uint32_t max_index_count  = max_face_count * 6;
     
-    uint32_t mesh_size = sizeof(ogt_mesh) + (max_vertex_count * sizeof(ogt_mesh_vertex)) + (max_index_count * sizeof(uint32_t));
-    ogt_mesh* mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
+    ogt_mesh* mesh = ogt_mesh_alloc_default(ctx, max_vertex_count, max_index_count);
     if (!mesh)
         return NULL;
-    
-    mesh->vertices = (ogt_mesh_vertex*)&mesh[1];
-    mesh->indices  = (uint32_t*)&mesh->vertices[max_vertex_count];
-    mesh->vertex_count = 0;
-    mesh->index_count  = 0;
-    
+ 
     ogt_stream_from_indexed_voxels_simple(voxels, size_x, size_y, size_z, _streaming_add_to_mesh, mesh);
     
     assert( mesh->vertex_count == max_vertex_count);
@@ -630,10 +690,10 @@ void ogt_stream_from_indexed_voxels_simple(
                 // -X direction face
                 if (neg_x)
                 {
-                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, min_z, -1.0f, 0.0f, 0.0f, color_index);
-                    current_vertex[1] = _mesh_make_vertex(min_x, max_y, min_z, -1.0f, 0.0f, 0.0f, color_index);
-                    current_vertex[2] = _mesh_make_vertex(min_x, max_y, max_z, -1.0f, 0.0f, 0.0f, color_index);
-                    current_vertex[3] = _mesh_make_vertex(min_x, min_y, max_z, -1.0f, 0.0f, 0.0f, color_index);
+                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, min_z, k_default_normal_neg_x, color_index);
+                    current_vertex[1] = _mesh_make_vertex(min_x, max_y, min_z, k_default_normal_neg_x, color_index);
+                    current_vertex[2] = _mesh_make_vertex(min_x, max_y, max_z, k_default_normal_neg_x, color_index);
+                    current_vertex[3] = _mesh_make_vertex(min_x, min_y, max_z, k_default_normal_neg_x, color_index);
                     current_index[0] = total_vertex_count + 2;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 0;
@@ -649,10 +709,10 @@ void ogt_stream_from_indexed_voxels_simple(
                 // +X direction face
                 if (pos_x)
                 {
-                    current_vertex[0] = _mesh_make_vertex(max_x, min_y, min_z, 1.0f, 0.0f, 0.0f, color_index);
-                    current_vertex[1] = _mesh_make_vertex(max_x, max_y, min_z, 1.0f, 0.0f, 0.0f, color_index);
-                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, max_z, 1.0f, 0.0f, 0.0f, color_index);
-                    current_vertex[3] = _mesh_make_vertex(max_x, min_y, max_z, 1.0f, 0.0f, 0.0f, color_index);
+                    current_vertex[0] = _mesh_make_vertex(max_x, min_y, min_z, k_default_normal_pos_x, color_index);
+                    current_vertex[1] = _mesh_make_vertex(max_x, max_y, min_z, k_default_normal_pos_x, color_index);
+                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, max_z, k_default_normal_pos_x, color_index);
+                    current_vertex[3] = _mesh_make_vertex(max_x, min_y, max_z, k_default_normal_pos_x, color_index);
                     current_index[0] = total_vertex_count + 0;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 2;
@@ -668,10 +728,10 @@ void ogt_stream_from_indexed_voxels_simple(
                 // -Y direction face
                 if (neg_y)
                 {
-                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color_index);
-                    current_vertex[1] = _mesh_make_vertex(max_x, min_y, min_z, 0.0f,-1.0f, 0.0f, color_index);
-                    current_vertex[2] = _mesh_make_vertex(max_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color_index);
-                    current_vertex[3] = _mesh_make_vertex(min_x, min_y, max_z, 0.0f,-1.0f, 0.0f, color_index);
+                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, min_z, k_default_normal_neg_y, color_index);
+                    current_vertex[1] = _mesh_make_vertex(max_x, min_y, min_z, k_default_normal_neg_y, color_index);
+                    current_vertex[2] = _mesh_make_vertex(max_x, min_y, max_z, k_default_normal_neg_y, color_index);
+                    current_vertex[3] = _mesh_make_vertex(min_x, min_y, max_z, k_default_normal_neg_y, color_index);
                     current_index[0] = total_vertex_count + 0;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 2;
@@ -686,10 +746,10 @@ void ogt_stream_from_indexed_voxels_simple(
                 // +Y direction face
                 if (pos_y)
                 {
-                    current_vertex[0] = _mesh_make_vertex(min_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color_index);
-                    current_vertex[1] = _mesh_make_vertex(max_x, max_y, min_z, 0.0f, 1.0f, 0.0f, color_index);
-                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color_index);
-                    current_vertex[3] = _mesh_make_vertex(min_x, max_y, max_z, 0.0f, 1.0f, 0.0f, color_index);
+                    current_vertex[0] = _mesh_make_vertex(min_x, max_y, min_z, k_default_normal_pos_y, color_index);
+                    current_vertex[1] = _mesh_make_vertex(max_x, max_y, min_z, k_default_normal_pos_y, color_index);
+                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, max_z, k_default_normal_pos_y, color_index);
+                    current_vertex[3] = _mesh_make_vertex(min_x, max_y, max_z, k_default_normal_pos_y, color_index);
                     current_index[0] = total_vertex_count + 2;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 0;
@@ -704,10 +764,10 @@ void ogt_stream_from_indexed_voxels_simple(
                 // -Z direction face
                 if (neg_z)
                 {
-                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color_index);
-                    current_vertex[1] = _mesh_make_vertex(max_x, min_y, min_z, 0.0f, 0.0f,-1.0f, color_index);
-                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color_index);
-                    current_vertex[3] = _mesh_make_vertex(min_x, max_y, min_z, 0.0f, 0.0f,-1.0f, color_index);
+                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, min_z, k_default_normal_neg_z, color_index);
+                    current_vertex[1] = _mesh_make_vertex(max_x, min_y, min_z, k_default_normal_neg_z, color_index);
+                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, min_z, k_default_normal_neg_z, color_index);
+                    current_vertex[3] = _mesh_make_vertex(min_x, max_y, min_z, k_default_normal_neg_z, color_index);
                     current_index[0] = total_vertex_count + 2;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 0;
@@ -722,10 +782,10 @@ void ogt_stream_from_indexed_voxels_simple(
                 // +Z direction face
                 if (pos_z)
                 {
-                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color_index);
-                    current_vertex[1] = _mesh_make_vertex(max_x, min_y, max_z, 0.0f, 0.0f, 1.0f, color_index);
-                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color_index);
-                    current_vertex[3] = _mesh_make_vertex(min_x, max_y, max_z, 0.0f, 0.0f, 1.0f, color_index);
+                    current_vertex[0] = _mesh_make_vertex(min_x, min_y, max_z, k_default_normal_pos_z, color_index);
+                    current_vertex[1] = _mesh_make_vertex(max_x, min_y, max_z, k_default_normal_pos_z, color_index);
+                    current_vertex[2] = _mesh_make_vertex(max_x, max_y, max_z, k_default_normal_pos_z, color_index);
+                    current_vertex[3] = _mesh_make_vertex(min_x, max_y, max_z, k_default_normal_pos_z, color_index);
                     current_index[0] = total_vertex_count + 0;
                     current_index[1] = total_vertex_count + 1;
                     current_index[2] = total_vertex_count + 2;
@@ -756,8 +816,9 @@ void ogt_stream_from_indexed_voxels_simple(
 void _greedy_meshify_voxels_in_face_direction(
     const uint8_t* voxels,
     int32_t size_x, int32_t size_y, int32_t size_z,                // how many voxels in each of X,Y,Z dimensions
-    int32_t k_stride_x, int32_t k_stride_y, int32_t k_stride_z,            // the memory stride for each of those X,Y,Z dimensions within the voxel data.
-    const ogt_mesh_transform& transform,                                    // transform to convert from X,Y,Z to "objectSpace"
+    int32_t k_stride_x, int32_t k_stride_y, int32_t k_stride_z,    // the memory stride for each of those X,Y,Z dimensions within the voxel data.
+    uint32_t normal_index,                                         // which normal direction to use
+    const ogt_mesh_transform& transform,                           // transform to convert from X,Y,Z to "objectSpace"
     ogt_mesh* out_mesh)
 {
 
@@ -767,8 +828,6 @@ void _greedy_meshify_voxels_in_face_direction(
     // allocate a structure that is used for tracking which voxels in a slice have already been included in output mesh.
     assert(max_voxels_per_slice <= 65536);	// 
     ogt_mesh_bitset_64k voxel_polygonized;
-
-    ogt_mesh_vec3 normal = _transform_vector(transform, _make_vec3(0.0f, 0.0f, 1.0f));
 
 #define VOXELDATA_INDEX(_x,_y,_z)        ((_x) * k_stride_x) + ((_y) * k_stride_y) + ((_z) * k_stride_z)
 #define LOCALDATA_INDEX(_x,_y)            ((_x) + ((_y) * size_x))
@@ -852,10 +911,10 @@ void _greedy_meshify_voxels_in_face_direction(
                 float max_z = (float)k1;
 
                 // write the verts for this face
-                vertex_data[0] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, min_y, max_z)), normal, color_index);
-                vertex_data[1] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, min_y, max_z)), normal, color_index);
-                vertex_data[2] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, max_y, max_z)), normal, color_index);
-                vertex_data[3] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, max_y, max_z)), normal, color_index);
+                vertex_data[0] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, min_y, max_z)), normal_index, color_index);
+                vertex_data[1] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, min_y, max_z)), normal_index, color_index);
+                vertex_data[2] = _mesh_make_vertex(_transform_point(transform, _make_vec3(max_x, max_y, max_z)), normal_index, color_index);
+                vertex_data[3] = _mesh_make_vertex(_transform_point(transform, _make_vec3(min_x, max_y, max_z)), normal_index, color_index);
 
                 // reserve the index order to ensure parity/winding is still correct.
                 if (is_parity_flipped) {
@@ -886,7 +945,6 @@ void _greedy_meshify_voxels_in_face_direction(
 
 #undef VOXELDATA_INDEX
 #undef LOCALDATA_INDEX
-
 }
 
 ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
@@ -897,15 +955,9 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
     uint32_t max_vertex_count = max_face_count * 4;
     uint32_t max_index_count  = max_face_count * 6;
     
-    uint32_t mesh_size = sizeof(ogt_mesh) + (max_vertex_count * sizeof(ogt_mesh_vertex)) + (max_index_count * sizeof(uint32_t));
-    ogt_mesh* mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
+    ogt_mesh* mesh = ogt_mesh_alloc_default(ctx, max_vertex_count, max_index_count);
     if (!mesh)
         return NULL;
-    
-    mesh->vertices = (ogt_mesh_vertex*)&mesh[1];
-    mesh->indices  = (uint32_t*)&mesh->vertices[max_vertex_count];
-    mesh->vertex_count = 0;
-    mesh->index_count  = 0;
     
     const int32_t k_stride_x = 1;
     const int32_t k_stride_y = size_x;
@@ -923,6 +975,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
             voxels, 
             size_z, size_x, size_y,
             k_stride_z, k_stride_x, k_stride_y,
+            k_default_normal_pos_y,
             transform_pos_y,
             mesh);
     }
@@ -938,6 +991,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
             voxels + (size_y - 1) * k_stride_y, 
             size_z, size_x, size_y,
             k_stride_z, k_stride_x,-k_stride_y,
+            k_default_normal_neg_y,
             transform_neg_y,
             mesh);
     }
@@ -953,6 +1007,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
             voxels,
             size_y, size_z, size_x,
             k_stride_y, k_stride_z, k_stride_x,
+            k_default_normal_pos_x,
             transform_pos_x,
             mesh);
     }
@@ -968,6 +1023,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
             voxels + (size_x - 1) * k_stride_x,
             size_y, size_z, size_x,
             k_stride_y, k_stride_z, -k_stride_x,
+            k_default_normal_neg_x,
             transform_neg_x,
             mesh);
     }
@@ -983,6 +1039,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
             voxels,
             size_x, size_y, size_z,
             k_stride_x, k_stride_y, k_stride_z,
+            k_default_normal_pos_z,
             transform_pos_z,
             mesh);
     }
@@ -998,6 +1055,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_greedy(
             voxels + (size_z-1) * k_stride_z, 
             size_x, size_y, size_z,
             k_stride_x, k_stride_y, -k_stride_z,
+            k_default_normal_neg_z,
             transform_neg_z,
             mesh);
     }
@@ -1532,6 +1590,7 @@ void _polygon_meshify_voxels_in_face_direction(
     const uint8_t* voxels,
     int32_t size_x, int32_t size_y, int32_t size_z,                // how many voxels in each of X,Y,Z dimensions
     int32_t k_stride_x, int32_t k_stride_y, int32_t k_stride_z,    // the memory stride for each of those X,Y,Z dimensions within the voxel data.
+    uint32_t normal_index,
     const ogt_mesh_transform& transform,                           // transform to convert from X,Y,Z to "objectSpace"
     ogt_mesh* mesh)
 {
@@ -1546,8 +1605,6 @@ void _polygon_meshify_voxels_in_face_direction(
     const ogt_mesh_vec3* up   = _make_vec3_ptr(&transform.m10);
     const ogt_mesh_vec3* fwd  = _make_vec3_ptr(&transform.m20);
     bool is_parity_flipped    = _dot3(*fwd, _cross3(*side, *up)) < 0.0f;
-
-    ogt_mesh_vec3 normal = _transform_vector(transform, _make_vec3(0.0f, 0.0f, 1.0f));
 
     for ( int32_t k = 0; k < (int32_t)size_z; k++ ) {
         bool is_last_slice = (k == (size_z-1)) ? true : false;
@@ -1610,7 +1667,7 @@ void _polygon_meshify_voxels_in_face_direction(
                 // generate the verts in the output mesh
                 uint32_t base_vertex_index = mesh->vertex_count;
                 for (uint32_t vert_index = 0; vert_index < vert_count; vert_index++) {
-                    mesh->vertices[mesh->vertex_count++] = _mesh_make_vertex(_transform_point(transform, _make_vec3((float)verts[vert_index].x, (float)verts[vert_index].y,   (float)(k+1))), normal, color_index);
+                    mesh->vertices[mesh->vertex_count++] = _mesh_make_vertex(_transform_point(transform, _make_vec3((float)verts[vert_index].x, (float)verts[vert_index].y,   (float)(k+1))), normal_index, color_index);
                 }
 
                 // generate the indices in the output mesh.
@@ -1660,15 +1717,9 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
     uint32_t max_vertex_count = max_face_count * 4;
     uint32_t max_index_count  = max_face_count * 6;
 
-    uint32_t mesh_size = sizeof(ogt_mesh) + (max_vertex_count * sizeof(ogt_mesh_vertex)) + (max_index_count * sizeof(uint32_t));
-    ogt_mesh* mesh = (ogt_mesh*)_voxel_meshify_malloc(ctx, mesh_size);
+    ogt_mesh* mesh = ogt_mesh_alloc_default(ctx, max_vertex_count, max_index_count);
     if (!mesh)
         return NULL;
-
-    mesh->vertices = (ogt_mesh_vertex*)&mesh[1];
-    mesh->indices  = (uint32_t*)&mesh->vertices[max_vertex_count];
-    mesh->vertex_count = 0;
-    mesh->index_count  = 0;
     
     const int32_t k_stride_x = 1;
     const int32_t k_stride_y = size_x;
@@ -1686,6 +1737,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
             voxels,
             size_z, size_x, size_y,
             k_stride_z, k_stride_x, k_stride_y,
+            k_default_normal_pos_y,
             transform_pos_y,
             mesh);
     }
@@ -1702,6 +1754,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
             voxels + (size_y - 1) * k_stride_y, 
             size_z, size_x, size_y,
             k_stride_z, k_stride_x,-k_stride_y,
+            k_default_normal_neg_y,
             transform_neg_y,
             mesh);
     }
@@ -1717,6 +1770,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
             voxels,
             size_y, size_z, size_x,
             k_stride_y, k_stride_z, k_stride_x,
+            k_default_normal_pos_x,
             transform_pos_x,
             mesh);
     }
@@ -1732,6 +1786,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
             voxels + (size_x - 1) * k_stride_x,
             size_y, size_z, size_x,
             k_stride_y, k_stride_z, -k_stride_x,
+            k_default_normal_neg_x,
             transform_neg_x,
             mesh);
     }
@@ -1747,6 +1802,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
             voxels,
             size_x, size_y, size_z,
             k_stride_x, k_stride_y, k_stride_z,
+            k_default_normal_pos_z,
             transform_pos_z,
             mesh);
     }
@@ -1762,6 +1818,7 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
             voxels + (size_z-1) * k_stride_z, 
             size_x, size_y, size_z,
             k_stride_x, k_stride_y, -k_stride_z,
+            k_default_normal_neg_z,
             transform_neg_z,
             mesh);
     }
@@ -1774,6 +1831,9 @@ ogt_mesh* ogt_mesh_from_indexed_voxels_polygon(
 
 void ogt_mesh_destroy(const ogt_voxel_meshify_context* ctx, ogt_mesh* mesh )
 {
+    if (mesh->normals && (void*)mesh->normals != (void*)&mesh[1]) {
+        _voxel_meshify_free(ctx, mesh->normals);
+    }
     _voxel_meshify_free(ctx, mesh);
 }
 

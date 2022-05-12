@@ -306,11 +306,11 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
                         // precompute which index it was (same order as the 'vn' tags we wrote out when opening the file)
                         // and write it as a uint32_t into the x field. This allows us to avoid do this index conversion
                         // for every vert in a mesh, and not for every vert multiplied by the number of instances.
-                        ogt_mesh_vec3& normal = mesh->vertices[i].normal;
+                        ogt_mesh_vec3& normal = mesh->normals[mesh->vertices[i].normal_index];
                         uint32_t normal_index = normal.x != 0 ? (normal.x > 0.0f ? 0 : 1) :
                                                 normal.y != 0 ? (normal.y > 0.0f ? 2 : 3) :
                                                 (normal.z > 0.0f ? 4 : 5);
-                        *(uint32_t*)&normal.x = normal_index;
+                        mesh->vertices[i].normal_index = normal_index;
                     }
                     // cache this mesh so we don't need to do it multiple times.
                     meshes[model_index] = mesh;
@@ -348,9 +348,9 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
                     uint32_t t_i0 = mesh->vertices[mesh->indices[i+0]].color_index + 1;
                     uint32_t t_i1 = mesh->vertices[mesh->indices[i+1]].color_index + 1;
                     uint32_t t_i2 = mesh->vertices[mesh->indices[i+2]].color_index + 1;
-                    uint32_t n_i0 = *((uint32_t*)&mesh->vertices[mesh->indices[i+0]].normal.x) + 1;
-                    uint32_t n_i1 = *((uint32_t*)&mesh->vertices[mesh->indices[i+1]].normal.x) + 1;
-                    uint32_t n_i2 = *((uint32_t*)&mesh->vertices[mesh->indices[i+2]].normal.x) + 1;
+                    uint32_t n_i0 = *((uint32_t*)&mesh->vertices[mesh->indices[i+0]].normal_index) + 1;
+                    uint32_t n_i1 = *((uint32_t*)&mesh->vertices[mesh->indices[i+1]].normal_index) + 1;
+                    uint32_t n_i2 = *((uint32_t*)&mesh->vertices[mesh->indices[i+2]].normal_index) + 1;
                     fprintf(fout, "f %u/%u/%u %u/%u/%u %u/%u/%u\n", v_i0, t_i0, n_i0, v_i1, t_i1, n_i1, v_i2, t_i2, n_i2);
                 }
                 base_vertex_index += mesh->vertex_count;
