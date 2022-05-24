@@ -386,7 +386,7 @@
         ogt_vox_palette         palette;        // the palette for this scene
         ogt_vox_matl_array      materials;      // the extended materials for this scene
         uint32_t                num_cameras;    // number of cameras for this scene
-        ogt_vox_cam*      cameras;        // the cameras for this scene
+        const ogt_vox_cam*      cameras;        // the cameras for this scene
     } ogt_vox_scene;
 
     // allocate memory function interface. pass in size, and get a pointer to memory with at least that size available.
@@ -2886,9 +2886,6 @@
         // copy materials into the merged scene
         for (uint32_t color_index = 0; color_index < 256; color_index++)
             merged_scene-> materials.matl[color_index] = materials[color_index];
-
-        merged_scene->cameras = (ogt_vox_cam*)_vox_malloc(sizeof(ogt_vox_cam));
-        memcpy(merged_scene->cameras, (*scenes)->cameras, sizeof(ogt_vox_cam));
 
         return merged_scene;
     }
