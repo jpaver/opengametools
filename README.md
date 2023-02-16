@@ -8,7 +8,7 @@ So far it contains these libraries:
 
 ... and these applications:
 - [vox2fbx.cpp](https://github.com/jpaver/opengametools/blob/master/apps/vox2fbx.cpp) an application to extract models from `.vox` and save them to ascii fbx
-- [vox2obj.cpp](https://github.com/jpaver/opengametools/blob/master/apps/vox2obj.cpp) an application to extract full frames from `.vox' and save them to Wavefront OBJ files.
+- [vox2obj.cpp](https://github.com/jpaver/opengametools/blob/master/apps/vox2obj.cpp) an application to extract full frames from `.vox' and save them to Wavefront OBJ files. This tool also supports writing all frames out to individual single-frame .vox files.
 - [voxseparate.cpp](https://github.com/jpaver/opengametools/blob/master/apps/voxseparate.cpp) an application to extract models from `.vox` and save them to separate `.vox` files
 - [voxmerge.cpp](https://github.com/jpaver/opengametools/blob/master/apps/voxmerge.cpp) an application to merge multiple `.vox` files into a single `.vox` file
 
