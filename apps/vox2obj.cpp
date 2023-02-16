@@ -161,7 +161,7 @@ std::string zero_padded_string(uint32_t value, uint32_t num_zeroes) {
     return ret;
 }
 
-bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out_name, bool out_file_per_frame, float voxel_scale, uint32_t frame_min, uint32_t frame_max, const char* mesh_algorithm) {
+void get_frame_min_max(const ogt_vox_scene* scene, uint32_t& frame_min, uint32_t& frame_max) {
     // if frame_min/frame_max are all -1, we determine the frame range from the keyframes within the specified file.
     if (frame_min == UINT32_MAX && frame_max == UINT32_MAX) {
         frame_max = 0;
@@ -182,6 +182,69 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
             frame_max = 0;
         }
     }
+}
+
+bool save_scene(const ogt_vox_scene* scene, const std::string& file_name) {
+    // serialize the memory buffer
+    uint32_t buffer_size = 0;
+    uint8_t* buffer      = ogt_vox_write_scene(scene, &buffer_size);
+    if (!buffer || !buffer_size) {
+        return false;
+    }
+    // write to file!
+    bool  ret = false;
+    FILE* fp  = nullptr;
+    fopen_s(&fp, file_name.c_str(), "wb");
+    if (fp)
+    {
+        fwrite(buffer, buffer_size, 1, fp);
+        fclose(fp);
+        ret = true;
+    }
+    ogt_vox_free(buffer);
+    return ret;
+}
+
+bool export_scene_anim_as_vox(const ogt_vox_scene* scene, const std::string& out_name, uint32_t frame_min, uint32_t frame_max) {
+    bool ret = true;
+
+    get_frame_min_max(scene, frame_min, frame_max);
+    
+    ogt_vox_instance* instances = new ogt_vox_instance[scene->num_instances];
+    ogt_vox_group*    groups    = new ogt_vox_group[scene->num_groups];
+
+    for (uint32_t frame_index = frame_min; frame_index <= frame_max; frame_index++) {
+        // assemble the scene
+        for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++) {
+            instances[instance_index]                              = scene->instances[instance_index];
+            instances[instance_index].transform                    = ogt_vox_sample_anim_transform(&scene->instances[instance_index].transform_anim, frame_index);
+            instances[instance_index].model_index                  = ogt_vox_sample_anim_model(&scene->instances[instance_index].model_anim, frame_index);
+            instances[instance_index].transform_anim.num_keyframes = 0;
+            instances[instance_index].transform_anim.keyframes     = nullptr;
+            instances[instance_index].model_anim.num_keyframes     = 0;
+            instances[instance_index].model_anim.keyframes         = nullptr;
+        }
+        for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
+            groups[group_index]                              = scene->groups[group_index];
+            groups[group_index].transform                    = ogt_vox_sample_anim_transform(&scene->groups[group_index].transform_anim, frame_index);
+            groups[group_index].transform_anim.num_keyframes = 0;
+            groups[group_index].transform_anim.keyframes     = nullptr;
+        }
+        ogt_vox_scene out_scene = *scene;
+        out_scene.groups    = groups;
+        out_scene.instances = instances;
+
+        // write to disck
+        std::string out_vox_name = out_name + "-" + zero_padded_string(frame_index, 3) + ".vox";
+        ret &= save_scene(&out_scene, out_vox_name);
+    }
+    delete[] instances;
+    delete[] groups;
+    return ret;
+}
+
+bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out_name, bool out_file_per_frame, float voxel_scale, uint32_t frame_min, uint32_t frame_max, const char* mesh_algorithm) {
+    get_frame_min_max(scene, frame_min, frame_max);
 
     // put the color index into the alpha component of every color in the palette
     ogt_vox_palette palette = scene->palette;
@@ -367,7 +430,7 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
 void print_help()
 {
     printf(
-        "vox2animobj v1.0 by Justin Paver - source code available here: http://github.com/jpaver/opengametools \n"
+        "vox2animobj v2.0 by Justin Paver - source code available here: http://github.com/jpaver/opengametools \n"
         "\n"
         "This tool can extract frames out of a given MagicaVoxel.vox and save them either as separate .obj files,\n"
         " or as a single .obj file with separate internal objects for each frame.\n"
@@ -380,6 +443,7 @@ void print_help()
         " --output_name <name>    : (default: disabled): name of output files\n"
         " --scale <value>         : (default: 1.0): scaling factor to apply to output voxels\n"
         " --frames <first> <last> : which frame range to extract. If not specified, will extract all keyframes within the .vox file.\n"
+        " --output_vox            : (default: disabled): if specified will output .vox files for each frame instead of .obj"
         "\n"
         "example:\n"
         "  vox2animobj --mesh_algorithm polygon --output_name test --frames 0 119 --scale scene.vox\n"
@@ -407,6 +471,7 @@ int main(int argc, char** argv) {
     const char* mesh_algorithm    = "polygon";
     const char* output_name       = nullptr;
     bool        all_frames_in_one = false;
+    bool        output_as_vox     = false;
     uint32_t    frame_min         = UINT32_MAX; // auto!
     uint32_t    frame_max         = UINT32_MAX; // auto!
     float       scale             = 1.0f;
@@ -434,6 +499,10 @@ int main(int argc, char** argv) {
             scale = (float)atof(argv[i+1]);
             i += 2;
         }
+        else if (strcmp(argv[i], "--output_vox") == 0) {
+            output_as_vox = true;
+            i++;
+        }
         else if (strncmp(argv[i], "--", 2) == 0) {
             printf("ERROR: unrecognized parameter '%s'\n", argv[i]);
             return 1;
@@ -451,14 +520,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // validate specified mesh_algorithm is one of "polygon", "greedy" or "simple"
-    if (strcmp(mesh_algorithm, "polygon") != 0 &&
-        strcmp(mesh_algorithm, "greedy") != 0 &&
-        strcmp(mesh_algorithm, "simple") != 0)
-    {
-        printf("ERROR: invalid mesh algorithm specified: %s", mesh_algorithm);
-        print_help();
-        return 2;
+    uint32_t read_scene_flags = k_read_scene_flags_keyframes | k_read_scene_flags_groups | k_read_scene_flags_keep_empty_models_instances | k_read_scene_flags_keep_duplicate_models;
+
+    const ogt_vox_scene* scene = load_vox_scene(input_file, read_scene_flags);
+    if (!scene) {
+        printf("ERROR: could not load input file: %s", input_file);
+        return 3;
     }
 
     // either use the output prefix specified, or generate one from the input filename.
@@ -470,14 +537,24 @@ int main(int argc, char** argv) {
     else {
         output_prefix = std::string(output_name);
     }
-    bool output_file_per_frame = !all_frames_in_one;
 
-    const ogt_vox_scene* scene = load_vox_scene(input_file,  k_read_scene_flags_keyframes | k_read_scene_flags_groups | k_read_scene_flags_keep_empty_models_instances);
-    if (!scene) {
-        printf("ERROR: could not load input file: %s", input_file);
-        return 3;
+    bool ret = false;
+    if (output_as_vox) {
+        ret = export_scene_anim_as_vox(scene, output_prefix, frame_min, frame_max);
     }
-    bool ret = export_scene_anim_as_obj(scene, output_prefix, output_file_per_frame, scale, frame_min, frame_max, mesh_algorithm);
+    else {
+        bool output_file_per_frame = !all_frames_in_one;
+        // validate specified mesh_algorithm is one of "polygon", "greedy" or "simple"
+        if (strcmp(mesh_algorithm, "polygon") != 0 &&
+            strcmp(mesh_algorithm, "greedy") != 0 &&
+            strcmp(mesh_algorithm, "simple") != 0)
+        {
+            printf("ERROR: invalid mesh algorithm specified: %s", mesh_algorithm);
+            print_help();
+            return 2;
+        }
+        ret = export_scene_anim_as_obj(scene, output_prefix, output_file_per_frame, scale, frame_min, frame_max, mesh_algorithm);
+    }
     ogt_vox_destroy_scene(scene);
 
     return ret ? 4 : 0;
