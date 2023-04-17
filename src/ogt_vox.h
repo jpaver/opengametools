@@ -1313,6 +1313,7 @@
                     _vox_file_read_uint32(fp, &size_x);
                     _vox_file_read_uint32(fp, &size_y);
                     _vox_file_read_uint32(fp, &size_z);
+                    ogt_assert(size_x && size_y && size_z, "SIZE chunk has zero size");
                     break;
                 }
                 case CHUNK_ID_XYZI:
@@ -2275,6 +2276,7 @@
             _vox_file_write_uint32(fp, 0);
 
             // write the SIZE chunk payload
+            ogt_assert(model->size_x && model->size_y && model->size_z, "model has zero size");
             _vox_file_write_uint32(fp, model->size_x);
             _vox_file_write_uint32(fp, model->size_y);
             _vox_file_write_uint32(fp, model->size_z);
