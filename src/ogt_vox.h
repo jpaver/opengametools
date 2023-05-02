@@ -2584,6 +2584,13 @@
             _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
         }
 
+        // check that the buffer is not larger than the maximum file size, return nothing if would overflow
+        if( fp->data.count > UINT32_MAX ||  (fp->data.count - offset_post_main_chunk ) > UINT32_MAX )
+        {
+            *buffer_size = 0;
+            return NULL;  // note: fp will be freed in dtor on exit
+        }
+
         // we deliberately don't free the fp->data field, just pass the buffer pointer and size out to the caller
         *buffer_size = (uint32_t)fp->data.count;
         uint8_t* buffer_data = _vox_file_get_data(fp);
