@@ -2585,7 +2585,7 @@
         }
 
         // check that the buffer is not larger than the maximum file size, return nothing if would overflow
-        if( fp->data.count > UINT32_MAX ||  (fp->data.count - offset_post_main_chunk ) > UINT32_MAX )
+        if (fp->data.count > UINT32_MAX ||  (fp->data.count - offset_post_main_chunk) > UINT32_MAX)
         {
             ogt_assert(0, "Generated file size exceeded 4GiB, which is too large for Magicavoxel to parse.");
             *buffer_size = 0;
