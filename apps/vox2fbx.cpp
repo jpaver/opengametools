@@ -28,18 +28,23 @@
 #define OGT_VOXEL_MESHIFY_IMPLEMENTATION
 #include "../src/ogt_voxel_meshify.h"
 
+FILE * open_file(const char *filename, const char *mode)
+{
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+    FILE * fp;
+    if (0 != fopen_s(&fp, filename, mode))
+        fp = 0;
+#else
+    FILE * fp = fopen(filename, mode);
+#endif
+    return fp;
+}
 
 // a helper function to load a magica voxel scene given a filename.
 const ogt_vox_scene* load_vox_scene(const char* filename, uint32_t scene_read_flags = 0)
 {
     // open the file
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-    FILE * fp;
-    if (0 != fopen_s(&fp, filename, "rb"))
-        fp = 0;
-#else
-    FILE * fp = fopen(filename, "rb");
-#endif
+    FILE * fp = open_file(filename, "rb");
     if (!fp)
         return NULL;
 
@@ -100,12 +105,7 @@ void print_help() {
 
 bool write_mesh_to_fbx(const char* output_filename, const ogt_mesh* mesh, const char* mesh_name)
 {
-#if defined(_MSC_VER) && _MSC_VER >= 1400  
-    FILE* fout = NULL;
-    fopen_s(&fout, output_filename, "wb");
-#else
-    FILE* fout = fopen(output_filename, "wb");
-#endif
+    FILE* fout = open_file(output_filename, "wb");
     if (!fout) {
         return false;
     }
@@ -236,7 +236,7 @@ bool write_mesh_to_fbx(const char* output_filename, const ogt_mesh* mesh, const 
         "\t\t}\n"
     );
 
-    // write the tail of the model 
+    // write the tail of the model
     fprintf(fout,
         "\t}\n"
         "}\n"
@@ -339,7 +339,7 @@ int32_t main(int32_t argc, char** argv) {
                         model_name = scene->instances[instance_index].name;
                     }
                     else {
-                        // warn if there are multiple instances of the same model with different names causing ambiguity (a .vox author could do this without knowing). 
+                        // warn if there are multiple instances of the same model with different names causing ambiguity (a .vox author could do this without knowing).
                         printf("WARNING: model %i has been given name %s but there is also an instance of this model with name %s.", model_index, model_name, scene->instances[instance_index].name);
                     }
                 }
@@ -353,7 +353,7 @@ int32_t main(int32_t argc, char** argv) {
                     continue;   // skip this model as it has no name and caller only wants to extract named models
                 }
 
-                // otherwise, autogenerate a name for the model based on its index in the vox file. 
+                // otherwise, autogenerate a name for the model based on its index in the vox file.
                 model_name = tmp_model_name;
                 sprintf_s(tmp_model_name, "model%i", model_index);
             }
