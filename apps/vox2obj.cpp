@@ -3,17 +3,19 @@
     vox2obj - MIT license - Justin Paver, April 2022
 
     A program that can convert MagicaVoxel .vox files to .obj, with optional support
-    for extracting given frames of animation out as either separate .obj or as 
+    for extracting given frames of animation out as either separate .obj or as
     separate objects within the .obj file.
-    
-    Please see the MIT license information at the end of this file, and please consider 
+
+    Please see the MIT license information at the end of this file, and please consider
     sharing any improvements you make.
 */
 
 #define ogt_
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#endif
 
 #define OGT_VOX_IMPLEMENTATION
 #include "../src/ogt_vox.h"
@@ -27,18 +29,25 @@
 #include <stdio.h>
 #include <vector>
 #include <string>
+#include <math.h>
+
+FILE * open_file(const char *filename, const char *mode)
+{
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+    FILE * fp;
+    if (0 != fopen_s(&fp, filename, mode))
+        fp = 0;
+#else
+    FILE * fp = fopen(filename, mode);
+#endif
+    return fp;
+}
 
 // a helper function to load a magica voxel scene given a filename.
 const ogt_vox_scene* load_vox_scene(const char* filename, uint32_t scene_read_flags = 0)
 {
     // open the file
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-    FILE * fp;
-    if (0 != fopen_s(&fp, filename, "rb"))
-        fp = 0;
-#else
-    FILE * fp = fopen(filename, "rb");
-#endif
+    FILE * fp = open_file(filename, "rb");
     if (!fp)
         return NULL;
 
@@ -88,7 +97,7 @@ ogt_mesh_vec3 transform_point(const ogt_vox_transform& transform, const ogt_mesh
     return result;
 }
 
-// writes 
+// writes
 void write_tga_24bit(const uint8_t* pixels, uint32_t width, uint32_t height, FILE* fout) {
     #pragma pack(push, 1)
     #pragma pack(1)
@@ -113,7 +122,7 @@ void write_tga_24bit(const uint8_t* pixels, uint32_t width, uint32_t height, FIL
     tga_image_header image_header = { (uint16_t)width, (uint16_t)height, 24, 0 };
     fwrite(&file_header, sizeof(file_header), 1, fout);
     fwrite(&image_header, sizeof(image_header), 1, fout);
-    // input is R,G,B, but we write in B,G,R order. This is a super slow implementation 
+    // input is R,G,B, but we write in B,G,R order. This is a super slow implementation
     // that writes a byte at a time to the file, but whatever...
     uint32_t image_size = width * height * 3;
     for (uint32_t i = 0; i < image_size; i += 3) {
@@ -125,8 +134,7 @@ void write_tga_24bit(const uint8_t* pixels, uint32_t width, uint32_t height, FIL
 
 FILE* open_obj_file(const char* filename)
 {
-    FILE* fout = nullptr;
-    fopen_s(&fout, filename, "wb");
+    FILE * fout = open_file(filename, "wb");
     if (!fout) {
         printf("could not open file '%s' for write - aborting!", filename);
         return nullptr;
@@ -150,7 +158,7 @@ FILE* open_obj_file(const char* filename)
 
 // converts input value to a string and pds with zeroes to a given length
 // eg. zero_padded_string(5,  3)  => "005"
-// eg. zero_padded_string(132,3)  => "132" 
+// eg. zero_padded_string(132,3)  => "132"
 // eg. zero_padded_string(1453,2) => "1453"
 std::string zero_padded_string(uint32_t value, uint32_t num_zeroes) {
     std::string ret = std::to_string(value);
@@ -169,12 +177,12 @@ void get_frame_min_max(const ogt_vox_scene* scene, uint32_t& frame_min, uint32_t
         for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++) {
             const ogt_vox_instance* instance = &scene->instances[instance_index];
             if (instance->model_anim.num_keyframes) {
-                frame_max = max(frame_max, instance->model_anim.keyframes[instance->model_anim.num_keyframes-1].frame_index);
-                frame_min = min(frame_max, instance->model_anim.keyframes[0].frame_index);
+                frame_max = std::max(frame_max, instance->model_anim.keyframes[instance->model_anim.num_keyframes-1].frame_index);
+                frame_min = std::min(frame_max, instance->model_anim.keyframes[0].frame_index);
             }
             if (instance->transform_anim.num_keyframes) {
-                frame_max = max(frame_max, instance->transform_anim.keyframes[instance->transform_anim.num_keyframes-1].frame_index);
-                frame_min = min(frame_max, instance->transform_anim.keyframes[0].frame_index);
+                frame_max = std::max(frame_max, instance->transform_anim.keyframes[instance->transform_anim.num_keyframes-1].frame_index);
+                frame_min = std::min(frame_max, instance->transform_anim.keyframes[0].frame_index);
             }
         }
         if (frame_min > frame_max) {
@@ -193,8 +201,7 @@ bool save_scene(const ogt_vox_scene* scene, const std::string& file_name) {
     }
     // write to file!
     bool  ret = false;
-    FILE* fp  = nullptr;
-    fopen_s(&fp, file_name.c_str(), "wb");
+    FILE* fp  = open_file(file_name.c_str(), "wb");
     if (fp)
     {
         fwrite(buffer, buffer_size, 1, fp);
@@ -209,7 +216,7 @@ bool export_scene_anim_as_vox(const ogt_vox_scene* scene, const std::string& out
     bool ret = true;
 
     get_frame_min_max(scene, frame_min, frame_max);
-    
+
     ogt_vox_instance* instances = new ogt_vox_instance[scene->num_instances];
     ogt_vox_group*    groups    = new ogt_vox_group[scene->num_groups];
 
@@ -263,8 +270,7 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
 
     // write palette data as tga
     {
-        FILE* fout = nullptr;
-        fopen_s(&fout, out_texture_name.c_str(), "wb");
+        FILE* fout = open_file(out_texture_name.c_str(), "wb");
         if (!fout) {
             printf("could not open file '%s' for write - aborting!", out_texture_name.c_str());
             return false;
@@ -283,9 +289,7 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
 
     // write material data
     {
-        FILE* fout = nullptr;
-
-        fopen_s(&fout, out_material_name.c_str(), "wb");
+        FILE* fout = open_file(out_material_name.c_str(), "wb");
         if (!fout) {
             printf("could not open file '%s' for write - aborting!", out_material_name.c_str());
             return false;
@@ -354,7 +358,7 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
                 if (model && !meshes[model_index]) {
                     // generate a mesh for this model using the mesh_algorithm specified
                     printf("  - generating mesh for model of size %u x %u x %u using mesh_algorithm %s\n", model->size_x, model->size_y, model->size_z, mesh_algorithm);
-                    ogt_mesh* mesh = 
+                    ogt_mesh* mesh =
                         (strcmp(mesh_algorithm, "polygon") == 0) ? ogt_mesh_from_paletted_voxels_polygon(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)&palette.color[0]) :
                         (strcmp(mesh_algorithm, "greedy") == 0) ? ogt_mesh_from_paletted_voxels_greedy(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)&palette.color[0]) :
                         (strcmp(mesh_algorithm, "simple") == 0) ? ogt_mesh_from_paletted_voxels_simple(&meshify_context, model->voxel_data, model->size_x, model->size_y, model->size_z, (const ogt_mesh_rgba*)&palette.color[0]) :
