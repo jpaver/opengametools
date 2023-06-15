@@ -4,7 +4,7 @@
     An application that can take 1 or multiple input Magicavoxel .vox files, merge them into a single .vox file and write it out.
     This is part of the open game tools project: https://github.com/jpaver/opengametools.
 
-    Please see the MIT license information at the end of this file, and please consider 
+    Please see the MIT license information at the end of this file, and please consider
     sharing any improvements you make.
 */
 
@@ -16,17 +16,23 @@
 #endif
 #include <stdio.h>
 
+FILE * open_file(const char *filename, const char *mode)
+{
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+    FILE * fp;
+    if (0 != fopen_s(&fp, filename, mode))
+        fp = 0;
+#else
+    FILE * fp = fopen(filename, mode);
+#endif
+    return fp;
+}
+
 // a helper function to load a magica voxel scene given a filename.
 const ogt_vox_scene* load_vox_scene(const char* filename, uint32_t scene_read_flags = 0)
 {
     // open the file
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-    FILE * fp;
-    if (0 != fopen_s(&fp, filename, "rb"))
-        fp = 0;
-#else
-    FILE * fp = fopen(filename, "rb");
-#endif
+    FILE * fp = open_file(filename, "rb");
     if (!fp)
         return NULL;
 
@@ -50,9 +56,9 @@ const ogt_vox_scene* load_vox_scene(const char* filename, uint32_t scene_read_fl
 }
 
 // a helper function to save a magica voxel scene to disk.
-bool save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene) 
+bool save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene)
 {
-    // save the scene back out. 
+    // save the scene back out.
     uint32_t buffersize = 0;
     uint8_t* buffer = ogt_vox_write_scene(scene, &buffersize);
     if (!buffer) {
@@ -60,13 +66,7 @@ bool save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene)
     }
 
     // open the file for write
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-    FILE * fp;
-    if (0 != fopen_s(&fp, pcFilename, "wb"))
-        fp = 0;
-#else
-    FILE * fp = fopen(pcFilename, "wb");
-#endif
+    FILE * fp = open_file(pcFilename, "wb");
     if (!fp) {
         ogt_vox_free(buffer);
         return false;
