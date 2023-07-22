@@ -229,8 +229,8 @@ bool export_scene_anim_as_vox(const ogt_vox_scene* scene, const std::string& out
         // assemble the scene
         for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++) {
             instances[instance_index]                              = scene->instances[instance_index];
-            instances[instance_index].transform                    = ogt_vox_sample_anim_transform(&scene->instances[instance_index].transform_anim, frame_index);
-            instances[instance_index].model_index                  = ogt_vox_sample_anim_model(&scene->instances[instance_index].model_anim, frame_index);
+            instances[instance_index].transform                    = ogt_vox_sample_instance_transform_local(&scene->instances[instance_index], frame_index);
+            instances[instance_index].model_index                  = ogt_vox_sample_instance_model(&scene->instances[instance_index], frame_index);
             instances[instance_index].transform_anim.num_keyframes = 0;
             instances[instance_index].transform_anim.keyframes     = nullptr;
             instances[instance_index].model_anim.num_keyframes     = 0;
@@ -238,7 +238,7 @@ bool export_scene_anim_as_vox(const ogt_vox_scene* scene, const std::string& out
         }
         for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
             groups[group_index]                              = scene->groups[group_index];
-            groups[group_index].transform                    = ogt_vox_sample_anim_transform(&scene->groups[group_index].transform_anim, frame_index);
+            groups[group_index].transform                    = ogt_vox_sample_group_transform_local(&scene->groups[group_index], frame_index);
             groups[group_index].transform_anim.num_keyframes = 0;
             groups[group_index].transform_anim.keyframes     = nullptr;
         }
@@ -355,7 +355,7 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
                 if (instance->group_index != k_invalid_group_index && scene->groups[instance->group_index].hidden)
                     continue;
 
-                ogt_vox_transform transform   = ogt_vox_sample_instance_transform(instance, frame_index, scene);
+                ogt_vox_transform transform   = ogt_vox_sample_instance_transform_global(instance, frame_index, scene);
                 uint32_t          model_index = ogt_vox_sample_instance_model(instance, frame_index);
 
                 // just in time generate the mesh for this model if we haven't already done so.
