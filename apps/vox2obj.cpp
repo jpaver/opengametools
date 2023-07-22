@@ -10,11 +10,15 @@
     sharing any improvements you make.
 */
 
-#define ogt_
-
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+// if min/max are not already defined, windows.h defines them, which breaks std::min/std::max. 
+// we can safely undefine them after we've included windows.h
+#define max
+#define min
+#include <windows.h>
+#undef max
+#undef min
 #endif
 
 #define OGT_VOX_IMPLEMENTATION
@@ -27,6 +31,7 @@
     #include <io.h>
 #endif
 #include <stdio.h>
+#include <algorithm>
 #include <vector>
 #include <string>
 #include <math.h>
