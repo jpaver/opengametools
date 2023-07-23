@@ -20,3 +20,6 @@ foreach (app ${APPS})
     )
     install(TARGETS ${APP_NAME} DESTINATION bin)
 endforeach()
+
+include(CTest)
+add_test(NAME test_multiple_model_scene COMMAND $<TARGET_FILE:demo_vox> ${CMAKE_CURRENT_SOURCE_DIR}/demo/vox/test_multiple_model_scene.vox)
