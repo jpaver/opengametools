@@ -101,9 +101,9 @@ uint32_t count_solid_voxels_in_model(const ogt_vox_model* model)
     return solid_voxel_count;
 }
 
-void demo_load_and_save()
+bool demo_load_and_save(const char *filename)
 {
-    const ogt_vox_scene* scene = load_vox_scene_with_groups("vox/test_groups.vox");
+    const ogt_vox_scene* scene = load_vox_scene_with_groups(filename);
     if (scene)
     {
         printf("#layers: %u\n", scene->num_layers);
@@ -170,7 +170,10 @@ void demo_load_and_save()
         save_vox_scene("saved.vox", scene); 
 
         ogt_vox_destroy_scene(scene);
+        return true;
     }
+    fprintf(stderr, "Failed to load %s\n", filename);
+    return false;
 }
 
 // demonstrates merging multiple scenes together
@@ -216,8 +219,17 @@ void demo_merge_scenes()
 
 int main(int argc, char** argv)
 {
-    demo_load_and_save();
+    const char *filename = "vox/test_groups.vox";
+    if (argc == 2)
+    {
+        filename = argv[1];
+    }
+    if (!demo_load_and_save(filename))
+    {
+        return 1;
+    }
     demo_merge_scenes();
+    return 0;
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------------------------------
