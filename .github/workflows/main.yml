@@ -24,6 +24,10 @@ jobs:
             cmake --build . --config Release
             cmake --install .  --prefix opengametools-install
 
+        - name: Test
+          run: |
+            ctest -V -C Release .
+
         - name: Upload the build artifacts
           uses: actions/upload-artifact@v3
           with:
