@@ -264,7 +264,6 @@ int32_t main(int32_t argc, char** argv) {
 
     // default parameter values
     const char* mesh_algorithm = "polygon";
-    const char* out_dir        = NULL;
     bool named_models_only     = false;
     bool y_as_up               = false;
 
