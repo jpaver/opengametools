@@ -206,6 +206,9 @@
     #include <inttypes.h>
 #elif __APPLE__
     // general Apple compiler
+    #include <stdint.h>
+    #include <limits.h>
+    #include <stdlib.h> // for size_t
 #elif defined(__GNUC__)
     // any GCC*
     #include <inttypes.h>

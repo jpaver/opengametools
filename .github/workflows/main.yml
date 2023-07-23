@@ -11,15 +11,29 @@ on:
       - master
 
 jobs:
-    linux:
-        runs-on: ubuntu-latest
+    build:
+        runs-on: ${{ matrix.platform.os }}
+        name: ${{ matrix.platform.name }}
 
         steps:
         - uses: actions/checkout@v3
 
-        - name: Linux
+        - name: Build
           run: |
-            g++ -Wall -Wextra -pedantic apps/vox2fbx.cpp
-            g++ -Wall -Wextra -pedantic apps/vox2obj.cpp
-            g++ -Wall -Wextra -pedantic apps/voxmerge.cpp
-            g++ -Wall -Wextra -pedantic apps/voxseparate.cpp
+            cmake .
+            cmake --build . --config Release
+            cmake --install .  --prefix opengametools-install
+
+        - name: Upload the build artifacts
+          uses: actions/upload-artifact@v3
+          with:
+            name: opengametools-${{ matrix.platform.name }}
+            path: opengametools-install
+
+        strategy:
+          fail-fast: false
+          matrix:
+            platform:
+            - { name: Windows,  os: windows-2022 }
+            - { name: Ubuntu,   os: ubuntu-latest }
+            - { name: MacOS,    os: macos-latest }
