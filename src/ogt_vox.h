@@ -1565,7 +1565,9 @@
                             uint8_t z = packed_voxel_data[i * 4 + 2];
                             uint8_t color_index = packed_voxel_data[i * 4 + 3];
                             ogt_assert(x < size_x && y < size_y && z < size_z, "invalid data in XYZI chunk");
-                            voxel_data[(x * k_stride_x) + (y * k_stride_y) + (z * k_stride_z)] = color_index;
+                            if(x < size_x && y < size_y && z < size_z ) { 
+                                voxel_data[(x * k_stride_x) + (y * k_stride_y) + (z * k_stride_z)] = color_index;
+                            }
                         }
                         _vox_file_seek_forwards(fp, num_voxels_in_chunk * 4);
                         // compute the hash of the voxels in this model-- used to accelerate duplicate models checking.
