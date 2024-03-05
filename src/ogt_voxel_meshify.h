@@ -1422,7 +1422,7 @@ int32_t _construct_polygon_for_slice(ogt_mesh_vec2i* verts, uint32_t max_verts, 
 
             // (1) try tessellate edge0, edge1, edge2.
             const uint32_t k_max_tessellations = 512;
-            assert(edge1_pushed_distance < k_max_tessellations);
+            assert(edge1_pushed_distance < (int)k_max_tessellations);
             ogt_mesh_vec2i tess_buffer[k_max_tessellations];
             uint32_t tess_offset = 0;
             

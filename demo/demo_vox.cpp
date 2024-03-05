@@ -133,7 +133,7 @@ bool demo_load_and_save(const char *filename)
         for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++)
         {
             const ogt_vox_instance* instance = &scene->instances[instance_index];
-            const ogt_vox_model* model = scene->models[instance->model_index];
+            // const ogt_vox_model* model = scene->models[instance->model_index];
             
             const char* layer_name =
                 instance->layer_index == UINT32_MAX ? "(no layer)":
