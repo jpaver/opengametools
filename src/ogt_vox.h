@@ -291,25 +291,34 @@
     static const uint32_t k_ogt_vox_matl_have_g      = 1 << 12;
     static const uint32_t k_ogt_vox_matl_have_media  = 1 << 13;
 
+    // media type for blend, glass and cloud materials
+    enum ogt_media_type {
+        ogt_media_type_absorb,  // Absorb media
+        ogt_media_type_scatter, // Scatter media
+        ogt_media_type_emit,    // Emissive media
+        ogt_media_type_sss,     // Subsurface scattering media
+    };
+
     // Extended Material Chunk MATL information
     typedef struct ogt_vox_matl
     {
-        uint32_t      content_flags; // set of k_ogt_vox_matl_* OR together to denote contents available
-        ogt_matl_type type;
-        float         metal;
-        float         rough;
-        float         spec;
-        float         ior;
-        float         att;
-        float         flux;
-        float         emit;
-        float         ldr;
-        float         trans;
-        float         alpha;
-        float         d;
-        float         sp;
-        float         g;
-        float         media;
+        uint32_t       content_flags; // set of k_ogt_vox_matl_* OR together to denote contents available
+        ogt_media_type media_type;    // media type for blend, glass and cloud materials
+        ogt_matl_type  type;
+        float          metal;
+        float          rough;         // roughness
+        float          spec;          // specular
+        float          ior;           // index of refraction
+        float          att;           // attenuation
+        float          flux;          // radiant flux (power)
+        float          emit;          // emissive
+        float          ldr;           // low dynamic range
+        float          trans;         // transparency
+        float          alpha;
+        float          d;             // density
+        float          sp;
+        float          g;
+        float          media;
     } ogt_vox_matl;
 
     // Extended Material Chunk MATL array of materials
@@ -1677,6 +1686,20 @@
                             materials.matl[material_id].type = ogt_matl_type_media;
                         }
                     }
+                    materials.matl[material_id].media_type = ogt_media_type_absorb;
+                    const char* media_type_string = _vox_dict_get_value_as_string(&dict, "_media_type", NULL);
+                    if (media_type_string) {
+                        if (0 == _vox_strcmp(media_type_string,"_scatter")) {
+                           materials.matl[material_id].media_type = ogt_media_type_scatter;
+                        }
+                        else if (0 == _vox_strcmp(media_type_string,"_emit")) {
+                            materials.matl[material_id].media_type = ogt_media_type_emit;
+                        }
+                        else if (0 == _vox_strcmp(media_type_string,"_sss")) {
+                            materials.matl[material_id].media_type = ogt_media_type_sss;
+                        }
+                    }
+
                     const char* metal_string = _vox_dict_get_value_as_string(&dict, "_metal", NULL);
                     if (metal_string) {
                         materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_metal;
@@ -2634,13 +2657,20 @@
         {
             // keep in sync with ogt_matl_type
             static const char *type_str[] = {"_diffuse", "_metal", "_glass", "_emit", "_blend", "_media"};
+            // keep in sync with ogt_media_type
+            static const char *media_type_str[] = {"_absorb", "_scatter", "_emit", "_sss"};
 
             for (int32_t i = 0; i < 256; ++i) {
                 const ogt_vox_matl &matl = scene->materials.matl[i];
                 if (matl.content_flags == 0u) {
                     continue;
                 }
-                uint32_t matl_dict_keyvalue_count = 1;
+                uint32_t matl_dict_keyvalue_count = 1; // _type
+                bool add_media_type = false;
+                if (matl.type == ogt_matl_type_glass || matl.type == ogt_matl_type_blend || matl.type == ogt_matl_type_media) {
+                    add_media_type = true;
+                    matl_dict_keyvalue_count += 1; // _media_type
+                }
                 matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_metal) ? 1 : 0;
                 matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_rough) ? 1 : 0;
                 matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_spec)  ? 1 : 0;
@@ -2666,6 +2696,9 @@
                 _vox_file_write_uint32(fp, i); // material id
                 _vox_file_write_uint32(fp, matl_dict_keyvalue_count);
                 _vox_file_write_dict_key_value(fp, "_type", type_str[matl.type]);
+                if (add_media_type) {
+                    _vox_file_write_dict_key_value(fp, "_media_type", media_type_str[matl.media_type]);
+                }
                 if (matl.content_flags & k_ogt_vox_matl_have_metal) {
                     _vox_file_write_dict_key_value_float(fp, "_metal", matl.metal);
                 }
