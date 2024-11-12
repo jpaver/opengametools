@@ -451,6 +451,9 @@
     // writes the scene to a new buffer and returns the buffer size. free the buffer with ogt_vox_free
     uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t* buffer_size);
 
+    // convert the camera into a transform
+    void ogt_vox_camera_to_transform(const ogt_vox_cam* camera, ogt_vox_transform* transform);
+
     // merges the specified scenes together to create a bigger scene. Merged scene can be destroyed using ogt_vox_destroy_scene
     // If you require specific colors in the merged scene palette, provide up to and including 255 of them via required_colors/required_color_count.
     ogt_vox_scene* ogt_vox_merge_scenes(const ogt_vox_scene** scenes, uint32_t scene_count, const ogt_vox_rgba* required_colors, const uint32_t required_color_count);
@@ -584,6 +587,10 @@
     };
     static inline vec3 vec3_make(float x, float y, float z) { vec3 v; v.x = x; v.y = y; v.z = z; return v; }
     static inline vec3 vec3_negate(const vec3& v) { vec3 r; r.x = -v.x;  r.y = -v.y; r.z = -v.z; return r; }
+    static inline vec3 vec3_normalize(const vec3& v) { float inv_len = 1.0f / sqrtf(v.x * v.x + v.y * v.y + v.z * v.z); vec3 r; r.x = v.x * inv_len; r.y = v.y * inv_len; r.z = v.z * inv_len; return r; }
+    static inline vec3 vec3_cross(const vec3& a, const vec3& b) { vec3 r; r.x = a.y * b.z - a.z * b.y; r.y = a.z * b.x - a.x * b.z; r.z = a.x * b.y - a.y * b.x; return r; }
+    static inline vec3 vec3_sub(const vec3& a, const vec3& b) { vec3 r; r.x = a.x - b.x; r.y = a.y - b.y; r.z = a.z - b.z; return r; }
+    static inline float vec3_dot(const vec3& a, const vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
     // API for emulating file transactions on an in-memory buffer of data.
     struct _vox_file {
@@ -1355,6 +1362,50 @@
     ogt_vox_transform ogt_vox_sample_group_transform_local(const ogt_vox_group* group, uint32_t frame_index)
     {
         return group->transform_anim.num_keyframes ? ogt_vox_sample_anim_transform(&group->transform_anim, frame_index) : group->transform;
+    }
+
+    static ogt_vox_transform transform_look_at(vec3 eye, vec3 target, vec3 up) {
+        vec3 cam_forward = vec3_normalize(vec3_sub(target, eye));
+        vec3 cam_right = vec3_normalize(vec3_cross(up, cam_forward));
+        vec3 cam_up = vec3_cross(cam_forward, cam_right);
+
+        // Build the 4x4 view matrix
+        ogt_vox_transform transform;
+        transform.m00 = cam_right.x;
+        transform.m01 = cam_up.x;
+        transform.m02 = -cam_forward.x;
+        transform.m03 = 0.0f;
+
+        transform.m10 = cam_right.y;
+        transform.m11 = cam_up.y;
+        transform.m12 = -cam_forward.y;
+        transform.m13 = 0.0f;
+
+        transform.m20 = cam_right.z;
+        transform.m21 = cam_up.z;
+        transform.m22 = -cam_forward.z;
+        transform.m23 = 0.0f;
+
+        transform.m30 = -vec3_dot(cam_right, eye);
+        transform.m31 = -vec3_dot(cam_up, eye);
+        transform.m32 = vec3_dot(cam_forward, eye);
+        transform.m33 = 1.0f;
+
+        return transform;
+    }
+
+    void ogt_vox_camera_to_transform(const ogt_vox_cam* camera, ogt_vox_transform* transform) {
+        const vec3 focus = vec3_make(camera->focus[0], camera->focus[1], camera->focus[2]);
+        const float yaw = camera->angle[1] * (M_PI / 180.0f);
+        const float pitch = camera->angle[0] * (M_PI / 180.0f);
+        const vec3 camera_pos = vec3_make(
+            focus.x + camera->radius * cosf(pitch) * sinf(yaw),
+            focus.y + camera->radius * sinf(pitch),
+            focus.z + camera->radius * cosf(pitch) * cosf(yaw)
+        );
+        // Define the up vector (assuming Y-up orientation)
+        const vec3 up = vec3_make(0.0f, 1.0f, 0.0f);
+        *transform = transform_look_at(camera_pos, focus, up);
     }
 
     const ogt_vox_scene* ogt_vox_read_scene_with_flags(const uint8_t * buffer, uint32_t buffer_size, uint32_t read_flags) {
