@@ -173,6 +173,7 @@
     eg.
         #include "my_assert.h"
         #define ogt_assert(condition, message_str)    my_assert(condition, message_str)
+        #define ogt_warn(condition, message_str)      my_assert(condition, message_str)
 
         #define OGT_VOX_IMPLEMENTATION
         #include "path/to/ogt_vox.h"
@@ -483,6 +484,9 @@
 #ifndef ogt_assert
     #include <assert.h>
     #define ogt_assert(x, msg_str)      do { assert((x) && (msg_str)); } while(0)
+#endif
+#ifndef ogt_warn
+    #define ogt_warn(x, msg_str)        ogt_assert(x, msg_str)
 #endif
     #include <stdlib.h>
     #include <string.h>
@@ -1008,7 +1012,7 @@
         if (!str)
             return default_value;
         uint32_t value;
-        _vox_str_scanf(str, "%i", &value);
+        _vox_str_scanf(str, "%u", &value);
         return value;
     }
 
@@ -1225,7 +1229,7 @@
             }
             default:
             {
-                ogt_assert(0, "unhandled node type");
+                ogt_warn(0, "unhandled node type");
             }
         }
     }
@@ -1470,8 +1474,11 @@
                             uint8_t y = packed_voxel_data[i * 4 + 1];
                             uint8_t z = packed_voxel_data[i * 4 + 2];
                             uint8_t color_index = packed_voxel_data[i * 4 + 3];
-                            ogt_assert(x < size_x && y < size_y && z < size_z, "invalid data in XYZI chunk");
-                            voxel_data[(x * k_stride_x) + (y * k_stride_y) + (z * k_stride_z)] = color_index;
+                            const bool inside_region = x < size_x && y < size_y && z < size_z;
+                            ogt_warn(inside_region, "invalid data in XYZI chunk");
+                            if (inside_region) {
+                                voxel_data[(x * k_stride_x) + (y * k_stride_y) + (z * k_stride_z)] = color_index;
+                            }
                         }
                         _vox_file_seek_forwards(fp, num_voxels_in_chunk * 4);
                         // compute the hash of the voxels in this model-- used to accelerate duplicate models checking.
@@ -1509,8 +1516,8 @@
                     _vox_file_read_uint32(fp, &reserved_id);
                     _vox_file_read_uint32(fp, &layer_id);
                     _vox_file_read_uint32(fp, &num_frames);
-                    ogt_assert(reserved_id == UINT32_MAX, "unexpected values for reserved_id in nTRN chunk");
-                    ogt_assert(num_frames > 0, "must have at least 1 frame in nTRN chunk");
+                    ogt_warn(reserved_id == UINT32_MAX, "unexpected values for reserved_id in nTRN chunk");
+                    ogt_warn(num_frames > 0, "must have at least 1 frame in nTRN chunk");
 
                     // make space in misc_data array for the number of transforms we'll need for this node
                     ogt_vox_keyframe_transform* keyframes = misc_data.alloc_many<ogt_vox_keyframe_transform>(num_frames);
@@ -1624,7 +1631,7 @@
                     _vox_file_read_int32(fp, &layer_id);
                     _vox_file_read_dict(&dict, fp);
                     _vox_file_read_int32(fp, &reserved_id);
-                    ogt_assert(reserved_id == -1, "unexpected value for reserved_id in LAYR chunk");
+                    ogt_warn(reserved_id == -1, "unexpected value for reserved_id in LAYR chunk");
 
                     layers.grow_to_fit_index(layer_id);
                     layers[layer_id].name   = NULL;
@@ -1865,8 +1872,8 @@
 
             if (g_progress_callback_func) {
                 // we indicate progress as 0.8f * amount of buffer read + 0.2f at end after processing 
-                if (!g_progress_callback_func(0.8f*(float)(fp->offset)/(float)(fp->buffer_size), g_progress_callback_user_data))
-                {
+                const float progress = 0.8f * (float)(fp->offset) / (float)(fp->buffer_size);
+                if (!g_progress_callback_func(progress, g_progress_callback_user_data)) {
                     return 0;
                 }
             }
@@ -2258,10 +2265,10 @@
                 is_negative = f[i] < 0.0f ? true : false;
             }
             else {
-                ogt_assert(f[i] == 0.0f, "rotation vector should contain only 0.0f, 1.0f, or -1.0f");
+                ogt_warn(f[i] == 0.0f, "rotation vector should contain only 0.0f, 1.0f, or -1.0f");
             }
         }
-        ogt_assert(out_index != 3, "rotation vector was all zeroes but it should be a cardinal axis vector");
+        ogt_warn(out_index != 3, "rotation vector was all zeroes but it should be a cardinal axis vector");
         return is_negative;
     }
 
@@ -2274,7 +2281,7 @@
         bool row0_negative = _vox_get_vec3_rotation_bits(row0, row0_index);
         bool row1_negative = _vox_get_vec3_rotation_bits(row1, row1_index);
         bool row2_negative = _vox_get_vec3_rotation_bits(row2, row2_index);
-        ogt_assert(((1 << row0_index) | (1 << row1_index) | (1 << row2_index)) == 7, "non orthogonal rows found in transform"); // check that rows are orthogonal. There must be a non-zero entry in column 0, 1 and 2 across these 3 rows.
+        ogt_warn(((1 << row0_index) | (1 << row1_index) | (1 << row2_index)) == 7, "non orthogonal rows found in transform"); // check that rows are orthogonal. There must be a non-zero entry in column 0, 1 and 2 across these 3 rows.
         return (row0_index) | (row1_index << 2) | (row0_negative ? 1 << 4 : 0) | (row1_negative ? 1 << 5 : 0) | (row2_negative ? 1 << 6 : 0);
     }
 
@@ -2743,7 +2750,7 @@
         // check that the buffer is not larger than the maximum file size, return nothing if would overflow
         if (fp->data.count > UINT32_MAX ||  (fp->data.count - offset_post_main_chunk) > UINT32_MAX)
         {
-            ogt_assert(0, "Generated file size exceeded 4GiB, which is too large for Magicavoxel to parse.");
+            ogt_warn(0, "Generated file size exceeded 4GiB, which is too large for Magicavoxel to parse.");
             *buffer_size = 0;
             return NULL;  // note: fp will be freed in dtor on exit
         }
