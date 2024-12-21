@@ -182,6 +182,7 @@ int32_t main(int32_t argc, char** argv) {
             output_scene.num_models    = 1;
             output_scene.models        = &model;
             output_scene.palette       = scene->palette;
+            output_scene.materials     = scene->materials;
 
             // construct the output filename for this model.
             char output_filename[1024];
