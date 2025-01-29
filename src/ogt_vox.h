@@ -15,7 +15,7 @@
 
     HOW TO COMPILE THIS LIBRARY
 
-    1.  To compile this library, do this in *one* C or C++ file:
+    1.  To compile this library, do this in *one* C++ file:
         #define OGT_VOX_IMPLEMENTATION
         #include "ogt_vox.h"
 
