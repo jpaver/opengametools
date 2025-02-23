@@ -1848,7 +1848,7 @@
                     }
                     const char* fov_string = _vox_dict_get_value_as_string(&dict, "_fov", NULL);
                     if (fov_string) {
-                        _vox_str_scanf(angle_string, "%i", &camera.fov);
+                        _vox_str_scanf(fov_string, "%i", &camera.fov);
                     }
 
                     cameras.push_back(camera);
