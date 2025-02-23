@@ -244,7 +244,7 @@
         float m20, m21, m22, m23;   // column 2 of 4x4 matrix, 1st three elements = z axis vector, last element always 0.0
         float m30, m31, m32, m33;   // column 3 of 4x4 matrix. 1st three elements = translation vector, last element always 1.0
     } ogt_vox_transform;
-    
+
     ogt_vox_transform ogt_vox_transform_get_identity();
     ogt_vox_transform ogt_vox_transform_multiply(const ogt_vox_transform & a, const ogt_vox_transform & b);
 
@@ -458,7 +458,7 @@
     // sample the model index for a given instance at the given frame
     uint32_t          ogt_vox_sample_instance_model(const ogt_vox_instance* instance, uint32_t frame_index);
 
-    // samples the transform for an instance at a given frame. 
+    // samples the transform for an instance at a given frame.
     //   ogt_vox_sample_instance_transform_global returns the transform in world space (aka global)
     //   ogt_vox_sample_instance_transform_local returns the transform relative to its parent group
     ogt_vox_transform ogt_vox_sample_instance_transform_global(const ogt_vox_instance* instance, uint32_t frame_index, const ogt_vox_scene* scene);
@@ -507,7 +507,7 @@
     static const uint32_t CHUNK_ID_rCAM = MAKE_VOX_CHUNK_ID('r','C','A','M');
 
     static const uint32_t NAME_MAX_LEN     = 256;       // max name len = 255 plus 1 for null terminator
-    static const uint32_t CHUNK_HEADER_LEN = 12;        // 4 bytes for each of: chunk_id, chunk_size, chunk_child_size 
+    static const uint32_t CHUNK_HEADER_LEN = 12;        // 4 bytes for each of: chunk_id, chunk_size, chunk_child_size
 
     // Some older .vox files will not store a palette, in which case the following palette will be used!
     static const uint8_t k_default_vox_palette[256 * 4] = {
@@ -831,7 +831,7 @@
             return data.size();
         }
 
-        // gets the offset of a pointer that was allocated within this array. 
+        // gets the offset of a pointer that was allocated within this array.
         size_t offset_of(void* ptr) const {
             size_t unaligned_data = (size_t)&data[0];
             size_t unaligned_ptr  = (size_t)ptr;
@@ -862,7 +862,7 @@
             return data.alloc_many(num_bytes);
         }
 
-        // allocates and returns a pointer to many elements of the specified type. 
+        // allocates and returns a pointer to many elements of the specified type.
         // if align != 0, will use that alignment, otherwise will align to the size of the type T.
         template <class T>
         T* alloc_many(size_t num_elements, size_t align=0) {
@@ -1515,7 +1515,7 @@
                     // make space in misc_data array for the number of transforms we'll need for this node
                     ogt_vox_keyframe_transform* keyframes = misc_data.alloc_many<ogt_vox_keyframe_transform>(num_frames);
                     size_t keyframe_offset = misc_data.offset_of(keyframes);
-                    
+
                     for (uint32_t i = 0; i < num_frames; i++) {
                         // Parse the frame dictionary that contains:
                         //   _r : int8 ROTATION (c)
@@ -1864,7 +1864,7 @@
             } // end switch
 
             if (g_progress_callback_func) {
-                // we indicate progress as 0.8f * amount of buffer read + 0.2f at end after processing 
+                // we indicate progress as 0.8f * amount of buffer read + 0.2f at end after processing
                 if (!g_progress_callback_func(0.8f*(float)(fp->offset)/(float)(fp->buffer_size), g_progress_callback_user_data))
                 {
                     return 0;
@@ -1990,8 +1990,12 @@
                 instances[i].layer_index = 0;
             // add a single layer
             ogt_vox_layer new_layer;
-            new_layer.hidden = false;
-            new_layer.name   = NULL;
+            new_layer.hidden  = false;
+            new_layer.name    = NULL;
+            new_layer.color.r = 0;
+            new_layer.color.g = 0;
+            new_layer.color.b = 0;
+            new_layer.color.a = 0;
             layers.push_back(new_layer);
         }
 
@@ -2448,7 +2452,7 @@
                 }
             }
 
-            if (g_progress_callback_func) { 
+            if (g_progress_callback_func) {
                 // we indicate progress as number of models written, with an extra progress value for ending write
                 if (!g_progress_callback_func((float)(i + 1)/(float)(scene->num_models + 1), g_progress_callback_user_data))
                 {
@@ -2760,7 +2764,7 @@
             *main_chunk_child_size = *buffer_size - offset_post_main_chunk;
         }
 
-        if (g_progress_callback_func) { 
+        if (g_progress_callback_func) {
             // we indicate progress as number of models written, with an extra progress value for ending write
             g_progress_callback_func(1.0f,g_progress_callback_user_data); // we ignore the return as exiting here anyway
         }
