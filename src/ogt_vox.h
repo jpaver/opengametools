@@ -329,6 +329,15 @@
         int          fov;         // angle in degree
     } ogt_vox_cam;
 
+    typedef struct ogt_vox_sun
+    {
+        float        intensity;
+        float        area;     // 1.0 ~= 43.5 degrees
+        float        angle[2]; // elevation, azimuth
+        ogt_vox_rgba rgba;
+        bool         disk;     // visible sun disk
+    } ogt_vox_sun;
+
     // a 3-dimensional model of voxels
     typedef struct ogt_vox_model
     {
@@ -412,6 +421,7 @@
         ogt_vox_matl_array      materials;      // the extended materials for this scene
         uint32_t                num_cameras;    // number of cameras for this scene
         const ogt_vox_cam*      cameras;        // the cameras for this scene
+        ogt_vox_sun*            sun;            // sun - primary light at infinity
     } ogt_vox_scene;
 
     // allocate memory function interface. pass in size, and get a pointer to memory with at least that size available.
@@ -1378,6 +1388,8 @@
         uint32_t                     size_z = 0;
         uint8_t                      index_map[256];
         bool                         found_index_map_chunk = false;
+        ogt_vox_sun                  sun;
+        bool                         found_sun = false;
 
         // size some of our arrays to prevent resizing during the parsing for smallish cases.
         model_ptrs.reserve(64);
@@ -1399,6 +1411,7 @@
 
         // zero initialize materials (this sets valid defaults)
         memset(&materials, 0, sizeof(materials));
+
 
         // load and validate fileheader and file version.
         uint32_t file_header = 0;
@@ -1854,8 +1867,43 @@
                     cameras.push_back(camera);
                     break;
                 }
-                // we don't handle rOBJ (just a dict of render settings), so we just skip the chunk payload.
                 case CHUNK_ID_rOBJ:
+                {
+                     uint32_t curr_offset = fp->offset;
+                    _vox_file_read_dict(&dict, fp);
+                    const char* mode_string = _vox_dict_get_value_as_string(&dict, "_type", NULL);
+                    if (mode_string && !_vox_strcmp(mode_string, "_inf")) {
+                        // "_type" == "_inf" is a dictionary of sun settings
+                        found_sun    = true;
+                        // set defaults
+                        sun.intensity = 0.7f;
+                        sun.area      = 0.7f;
+                        sun.angle[0]  = 50.0f; sun.angle[1] = 50.0f;
+                        sun.rgba      = { 0xff, 0xff, 0xff, 0xff };
+                        sun.disk      = false;
+
+                        const char* intensity_string = _vox_dict_get_value_as_string(&dict, "_i", NULL);
+                        if (intensity_string) {
+                            _vox_str_scanf(intensity_string, "%f", &sun.intensity);
+                        }
+                        const char* area_string = _vox_dict_get_value_as_string(&dict, "_area", NULL);
+                        if (area_string) {
+                            _vox_str_scanf(area_string, "%f", &sun.area);
+                        }
+                        const char* angle_string = _vox_dict_get_value_as_string(&dict, "_angle", NULL);
+                        if (angle_string) {
+                            _vox_str_scanf(angle_string, "%f %f", &sun.angle[0], &sun.angle[1]);
+                        }
+                        const char* rgba_string = _vox_dict_get_value_as_string(&dict, "_k", NULL);
+                        if (rgba_string) {
+                            uint32_t urgb[3];
+                            _vox_str_scanf(rgba_string, "%i %i %i", &urgb[0], &urgb[1], &urgb[2]);
+                            sun.rgba.r = (uint8_t)urgb[0]; sun.rgba.g = (uint8_t)urgb[1]; sun.rgba.b = (uint8_t)urgb[2];
+                        }
+                        sun.disk = _vox_dict_get_value_as_bool(&dict, "_disk", false );
+                    }
+                    break;
+                }
                 default:
                 {
                     _vox_file_seek_forwards(fp, chunk_size);
@@ -2203,6 +2251,12 @@
 
             // copy the materials.
             scene->materials = materials;
+
+            // copy the sun
+            if (found_sun) {
+                scene->sun = (ogt_vox_sun*)_vox_malloc(sizeof(ogt_vox_sun));
+                *scene->sun = sun;
+            }
         }
 
         if (g_progress_callback_func) {
@@ -2245,6 +2299,11 @@
         if (scene->groups) {
             _vox_free(const_cast<ogt_vox_group*>(scene->groups));
             scene->groups = NULL;
+        }
+        // free sun
+        if (scene->sun) {
+            _vox_free(scene->sun);
+            scene->sun = NULL;
         }
         // finally, free the scene.
         _vox_free(scene);
@@ -2609,6 +2668,41 @@
             _vox_file_write_dict_key_value(fp, "_radius", cam_radius);
             _vox_file_write_dict_key_value(fp, "_frustum", cam_frustum);
             _vox_file_write_dict_key_value(fp, "_fov", cam_fov);
+
+            // compute and patch up the chunk size in the chunk header
+            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+        }
+
+        // write out the sun chunk
+        if (scene->sun) {
+
+            ogt_vox_sun* sun = scene->sun;
+            char sun_intensity[32] = "";
+            char sun_area[32] = "";
+            char sun_angle[64] = "";
+            char sun_rgba[64] = "";
+
+            _vox_sprintf(sun_intensity, "%.5f", sun->intensity);
+            _vox_sprintf(sun_area, "%.5f", sun->area);
+            _vox_sprintf(sun_angle, "%i %i", (int32_t)sun->angle[0], (int32_t)sun->angle[1]);
+            _vox_sprintf(sun_rgba, "%u %u %u", sun->rgba.r, sun->rgba.g, sun->rgba.b);
+            const char* sun_disk = sun->disk ? "1" : "0";
+
+            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+
+            // write the rOBJ header
+            _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+            _vox_file_write_uint32(fp, 0); // chunk_size will get patched up later
+            _vox_file_write_uint32(fp, 0);
+
+            _vox_file_write_uint32(fp, 6);  // num key values
+            _vox_file_write_dict_key_value(fp, "_type", "_inf");
+            _vox_file_write_dict_key_value(fp, "_i", sun_intensity);
+            _vox_file_write_dict_key_value(fp, "_area", sun_area);
+            _vox_file_write_dict_key_value(fp, "_angle", sun_angle);
+            _vox_file_write_dict_key_value(fp, "_k", sun_rgba);
+            _vox_file_write_dict_key_value(fp, "_disk", sun_disk);
 
             // compute and patch up the chunk size in the chunk header
             uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
