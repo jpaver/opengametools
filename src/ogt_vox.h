@@ -1494,7 +1494,7 @@
 
         // zero initialize materials (this sets valid defaults)
         memset(&materials, 0, sizeof(materials));
-
+        memset(&sun, 0, sizeof(sun));
 
         // load and validate fileheader and file version.
         uint32_t file_header = 0;
@@ -1990,7 +1990,8 @@
                         // set defaults
                         sun.intensity = 0.7f;
                         sun.area      = 0.7f;
-                        sun.angle[0]  = 50.0f; sun.angle[1] = 50.0f;
+                        sun.angle[0]  = 50.0f;
+                        sun.angle[1]  = 50.0f;
                         sun.rgba      = { 0xff, 0xff, 0xff, 0xff };
                         sun.disk      = false;
 
@@ -2012,7 +2013,7 @@
                             _vox_str_scanf(rgba_string, "%u %u %u", &urgb[0], &urgb[1], &urgb[2]);
                             sun.rgba.r = (uint8_t)urgb[0]; sun.rgba.g = (uint8_t)urgb[1]; sun.rgba.b = (uint8_t)urgb[2];
                         }
-                        sun.disk = _vox_dict_get_value_as_bool(&dict, "_disk", false );
+                        sun.disk = _vox_dict_get_value_as_bool(&dict, "_disk", false);
                     }
                     break;
                 }
