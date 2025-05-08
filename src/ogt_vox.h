@@ -216,7 +216,6 @@
 #else
     #error some fixup needed for this platform?
 #endif
-#include <math.h>
 
 #ifdef OGT_VOX_BIGENDIAN_SWAP32
     // host is big-endian, so we byte-swap
@@ -512,6 +511,8 @@
     #include <stdlib.h>
     #include <string.h>
     #include <stdio.h>
+    #define _USE_MATH_DEFINES
+    #include <math.h>
 
     // MAKE_VOX_CHUNK_ID: used to construct a literal to describe a chunk in a .vox file.
     #define MAKE_VOX_CHUNK_ID(c0,c1,c2,c3)     ( (c0<<0) | (c1<<8) | (c2<<16) | (c3<<24) )
