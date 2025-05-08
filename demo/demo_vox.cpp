@@ -4,7 +4,7 @@
     A demonstration program to show you how to use the MagicaVoxel scene reader,
     writer, and merger from the open game tools project: https://github.com/jpaver/opengametools.
 
-    Please see the MIT license information at the end of this file, and please consider 
+    Please see the MIT license information at the end of this file, and please consider
     sharing any improvements you make.
 */
 
@@ -55,9 +55,9 @@ const ogt_vox_scene* load_vox_scene_with_groups(const char* filename)
 }
 
 // a helper function to save a magica voxel scene to disk.
-void save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene) 
+void save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene)
 {
-    // save the scene back out. 
+    // save the scene back out.
     uint32_t buffersize = 0;
     uint8_t* buffer = ogt_vox_write_scene(scene, &buffersize);
     if (!buffer)
@@ -81,7 +81,7 @@ void save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene)
     ogt_vox_free(buffer);
 }
 
-// this example just counts the number of solid voxels in this model, but an importer 
+// this example just counts the number of solid voxels in this model, but an importer
 // would probably do something like convert the model into a triangle mesh.
 uint32_t count_solid_voxels_in_model(const ogt_vox_model* model)
 {
@@ -120,24 +120,24 @@ bool demo_load_and_save(const char *filename)
         {
             const ogt_vox_group* group = &scene->groups[group_index];
             const ogt_vox_layer* group_layer = group->layer_index != UINT32_MAX ? &scene->layers[group->layer_index] : NULL;
-            printf("group[%u] has parent group %u, is part of layer[%u,name=%s] and is %s\n", 
-                group_index, 
+            printf("group[%u] has parent group %u, is part of layer[%u,name=%s] and is %s\n",
+                group_index,
                 group->parent_group_index,
                 group->layer_index,
                 group_layer && group_layer->name ? group_layer->name : "",
                 group->hidden ? "hidden" : "shown");
         }
-            
+
         // iterate over all instances - and print basic information about the instance and the model that it references
         printf("# instances: %u\n", scene->num_instances);
         for (uint32_t instance_index = 0; instance_index < scene->num_instances; instance_index++)
         {
             const ogt_vox_instance* instance = &scene->instances[instance_index];
-            const ogt_vox_model* model = scene->models[instance->model_index];
-            
+            // const ogt_vox_model* model = scene->models[instance->model_index];
+
             const char* layer_name =
                 instance->layer_index == UINT32_MAX ? "(no layer)":
-                scene->layers[instance->layer_index].name ? scene->layers[instance->layer_index].name : 
+                scene->layers[instance->layer_index].name ? scene->layers[instance->layer_index].name :
                 "";
 
             printf("instance[%u,name=%s] at position (%.0f,%.0f,%.0f) uses model %u and is in layer[%u, name='%s'], group %u, and is %s\n",
@@ -167,7 +167,7 @@ bool demo_load_and_save(const char *filename)
                 model->voxel_hash);
         }
 
-        save_vox_scene("saved.vox", scene); 
+        save_vox_scene("saved.vox", scene);
 
         ogt_vox_destroy_scene(scene);
         return true;
