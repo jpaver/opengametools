@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <string.h>
 #if !_MSC_VER
-#define strcpy_s    strncpy
 #define sprintf_s   snprintf
 #endif
 
@@ -105,7 +104,7 @@ void print_help() {
 
 static void make_output_filename(const char* input_filename, const char* model_name, char* output_filename, size_t size) {
     // Copy input_filename
-    strcpy_s(output_filename, input_filename, size);
+    sprintf_s(output_filename, size, "%s", input_filename);
     output_filename[size - 1] = '\0'; // ensure null-termination
 
     // Strip the extension
