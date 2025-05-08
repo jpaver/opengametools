@@ -1437,8 +1437,8 @@
 
     void ogt_vox_camera_to_transform(const ogt_vox_cam* camera, ogt_vox_transform* transform) {
         const vec3 focus = vec3_make(camera->focus[0], camera->focus[1], camera->focus[2]);
-        const float yaw = camera->angle[1] * (M_PI / 180.0f);
-        const float pitch = camera->angle[0] * (M_PI / 180.0f);
+        const float yaw = camera->angle[1] * (float)(M_PI / 180.0);
+        const float pitch = camera->angle[0] * (float)(M_PI / 180.0);
         const vec3 camera_pos = vec3_make(
             focus.x + camera->radius * cosf(pitch) * sinf(yaw),
             focus.y + camera->radius * sinf(pitch),
