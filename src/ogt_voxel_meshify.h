@@ -1189,7 +1189,7 @@ ogt_mesh_vec2i get_edge_bias(const ogt_mesh_vec2i& edge_vert0, const ogt_mesh_ve
 
 uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mesh_vec2i& edge_vert0, const ogt_mesh_vec2i& edge_vert1,
                          const uint8_t* slice_colors, int32_t size_x, int32_t size_y ) {
-
+    (void)max_tess;
     uint32_t num_tess = 0;
     int32_t  edge_len       = get_cardinal_vector_length(edge_vert1 - edge_vert0);
     ogt_mesh_vec2i edge_bias = get_edge_bias(edge_vert0, edge_vert1);
@@ -1324,6 +1324,7 @@ uint32_t _tessellate_edge(ogt_mesh_vec2i* tess, uint32_t max_tess, const ogt_mes
 //
 int32_t _construct_polygon_for_slice(ogt_mesh_vec2i* verts, uint32_t max_verts, int32_t i, int32_t j, int32_t size_x, int32_t size_y, const uint8_t* slice_colors, ogt_mesh_bitset_64k& voxel_polygonized) {
     assert(max_verts > 4);
+    (void)max_verts;
     // start with just a single 4 vertex closed polygon
     verts[0] = make_vec2i(i,   j  );
     verts[1] = make_vec2i(i,   j+1);
