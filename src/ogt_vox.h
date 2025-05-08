@@ -216,6 +216,7 @@
 #else
     #error some fixup needed for this platform?
 #endif
+#include <math.h>
 
 #ifdef OGT_VOX_BIGENDIAN_SWAP32
     // host is big-endian, so we byte-swap
@@ -1054,7 +1055,7 @@
         if (!str)
             return default_value;
         uint32_t value;
-        _vox_str_scanf(str, "%i", &value);
+        _vox_str_scanf(str, "%u", &value);
         return value;
     }
 
@@ -1980,7 +1981,6 @@
                 }
                 case CHUNK_ID_rOBJ:
                 {
-                     uint32_t curr_offset = fp->offset;
                     _vox_file_read_dict(&dict, fp);
                     const char* mode_string = _vox_dict_get_value_as_string(&dict, "_type", NULL);
                     if (mode_string && !_vox_strcmp(mode_string, "_inf")) {
@@ -2008,7 +2008,7 @@
                         const char* rgba_string = _vox_dict_get_value_as_string(&dict, "_k", NULL);
                         if (rgba_string) {
                             uint32_t urgb[3];
-                            _vox_str_scanf(rgba_string, "%i %i %i", &urgb[0], &urgb[1], &urgb[2]);
+                            _vox_str_scanf(rgba_string, "%u %u %u", &urgb[0], &urgb[1], &urgb[2]);
                             sun.rgba.r = (uint8_t)urgb[0]; sun.rgba.g = (uint8_t)urgb[1]; sun.rgba.b = (uint8_t)urgb[2];
                         }
                         sun.disk = _vox_dict_get_value_as_bool(&dict, "_disk", false );
@@ -2507,7 +2507,7 @@
     }
     static void _vox_file_write_dict_key_value_uint32(_vox_file_writeable* fp, const char* key, uint32_t value) {
         char value_str[64];
-        _vox_sprintf(value_str, sizeof(value_str), "%i", value);
+        _vox_sprintf(value_str, sizeof(value_str), "%u", value);
         _vox_file_write_dict_key_value(fp, key, value_str);
     }
     static void _vox_file_write_dict_key_value_float(_vox_file_writeable* fp, const char* key, float value) {
@@ -2809,10 +2809,10 @@
             char sun_angle[64] = "";
             char sun_rgba[64] = "";
 
-            _vox_sprintf(sun_intensity, "%.5f", sun->intensity);
-            _vox_sprintf(sun_area, "%.5f", sun->area);
-            _vox_sprintf(sun_angle, "%i %i", (int32_t)sun->angle[0], (int32_t)sun->angle[1]);
-            _vox_sprintf(sun_rgba, "%u %u %u", sun->rgba.r, sun->rgba.g, sun->rgba.b);
+            _vox_sprintf(sun_intensity, sizeof(sun_intensity), "%.5f", sun->intensity);
+            _vox_sprintf(sun_area, sizeof(sun_area), "%.5f", sun->area);
+            _vox_sprintf(sun_angle, sizeof(sun_angle), "%i %i", (int32_t)sun->angle[0], (int32_t)sun->angle[1]);
+            _vox_sprintf(sun_rgba, sizeof(sun_rgba), "%u %u %u", sun->rgba.r, sun->rgba.g, sun->rgba.b);
             const char* sun_disk = sun->disk ? "1" : "0";
 
             uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
