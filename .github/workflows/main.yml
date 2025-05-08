@@ -16,7 +16,7 @@ jobs:
         name: ${{ matrix.platform.name }}
 
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
 
         - name: Build
           run: |
@@ -29,7 +29,7 @@ jobs:
             ctest -V -C Release .
 
         - name: Upload the build artifacts
-          uses: actions/upload-artifact@v3
+          uses: actions/upload-artifact@v4
           with:
             name: opengametools-${{ matrix.platform.name }}
             path: opengametools-install
