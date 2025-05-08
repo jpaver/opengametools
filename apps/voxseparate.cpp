@@ -16,11 +16,11 @@
     IN THE SOFTWARE.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------- */
+#include <stdio.h>
 #include <string.h>
 #if !_MSC_VER
-#define strcat_s    strcat
-#define strcpy_s    strcpy
-#define sprintf_s   sprintf
+#define strcpy_s    strncpy
+#define sprintf_s   snprintf
 #endif
 
 #define OGT_VOX_IMPLEMENTATION
@@ -80,6 +80,7 @@ void save_vox_scene(const char* pcFilename, const ogt_vox_scene* scene)
     // open the file for write
     FILE * fp = open_file(pcFilename, "wb");
     if (!fp) {
+        fprintf(stderr, "ERROR: could not open file '%s' for write - aborting!\n", pcFilename);
         ogt_vox_free(buffer);
         return;
     }
@@ -100,6 +101,24 @@ void print_help() {
         "  It is recommended that you provide names for each instance of your model within the .vox files so\n"
         "  that output filenames make sense, otherwise output filenames will be auto-generated\n"
     );
+}
+
+static void make_output_filename(const char* input_filename, const char* model_name, char* output_filename, size_t size) {
+    // Copy input_filename
+    strcpy_s(output_filename, input_filename, size);
+    output_filename[size - 1] = '\0'; // ensure null-termination
+
+    // Strip the extension
+    char* ext = strchr(output_filename, '.');
+    if (ext) {
+        *ext = '\0';
+    }
+
+    // Append "-", model_name, ".vox" using snprintf
+    sprintf_s(output_filename + strlen(output_filename),
+              size - strlen(output_filename),
+              "-%s.vox",
+              model_name);
 }
 
 int32_t main(int32_t argc, char** argv) {
@@ -159,7 +178,7 @@ int32_t main(int32_t argc, char** argv) {
             if (!model_name) {
                 // otherwise, autogenerate a name for the model based on its index in the vox file.
                 model_name = tmp_model_name;
-                sprintf_s(tmp_model_name, "model%i", model_index);
+                sprintf_s(tmp_model_name, sizeof(tmp_model_name), "model%i", model_index);
             }
 
             // construct the scene with a single instance referencing this model
@@ -186,12 +205,7 @@ int32_t main(int32_t argc, char** argv) {
 
             // construct the output filename for this model.
             char output_filename[1024];
-            strcpy_s(output_filename, input_filename);
-            char* ext = strstr(output_filename, ".");
-            *ext = 0;
-            strcat_s(output_filename, "-");
-            strcat_s(output_filename, model_name);
-            strcat_s(output_filename, ".vox");
+            make_output_filename(input_filename, model_name, output_filename, sizeof(output_filename));
 
             save_vox_scene(output_filename, &output_scene);
         }
