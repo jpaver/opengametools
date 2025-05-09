@@ -332,10 +332,10 @@
         uint32_t     camera_id;
         ogt_cam_mode mode;
         float        focus[3];    // the target position
-        float        angle[3];    // rotation in degree
-        float        radius;
-        float        frustum;
-        int          fov;         // angle in degree
+        float        angle[3];    // rotation in degree - pitch (-180 to +180), yaw (0 to 360), roll (0 to 360)
+        float        radius;      // distance of camera position from target position, also controls frustum in MV for orthographic/isometric modes
+        float        frustum;     // 'height' of near plane of frustum, either orthographic height in voxels or tan( fov/2.0f )
+        int          fov;         // angle in degrees for height of field of view, ensure to set frustum as only used when changed in MV UI
     } ogt_vox_cam;
 
     typedef struct ogt_vox_sun
