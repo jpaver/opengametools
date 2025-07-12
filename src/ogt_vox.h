@@ -2621,6 +2621,25 @@
         // we need to know how to patch up the main chunk size after we've written everything
         const uint32_t offset_post_main_chunk = _vox_file_get_offset(fp);
 
+        // write out the META chunk
+        {
+            char anim_range[64] = "";
+            _vox_sprintf(anim_range, sizeof(anim_range), "%d %d", (int)scene->anim_range_start, (int)scene->anim_range_end);
+
+            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+            // write the META header
+            _vox_file_write_uint32(fp, CHUNK_ID_META);
+            _vox_file_write_uint32(fp, 0); // chunk_size will get patched up later
+            _vox_file_write_uint32(fp, 0);
+
+            _vox_file_write_uint32(fp, 1);  // num key values
+            _vox_file_write_dict_key_value(fp, "_anim_range", anim_range);
+
+            // compute and patch up the chunk size in the chunk header
+            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+        }
+
         // write out all model chunks
         for (uint32_t i = 0; i < scene->num_models; i++) {
             const ogt_vox_model* model = scene->models[i];
@@ -2829,28 +2848,8 @@
             _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
         }
 
-        // write out the META chunk
-        {
-            char anim_range[64] = "";
-            _vox_sprintf(anim_range, sizeof(anim_range), "%d %d", (int)scene->anim_range_start, (int)scene->anim_range_end);
-
-            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
-            // write the META header
-            _vox_file_write_uint32(fp, CHUNK_ID_META);
-            _vox_file_write_uint32(fp, 0); // chunk_size will get patched up later
-            _vox_file_write_uint32(fp, 0);
-
-            _vox_file_write_uint32(fp, 1);  // num key values
-            _vox_file_write_dict_key_value(fp, "_anim_range", anim_range);
-
-            // compute and patch up the chunk size in the chunk header
-            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
-            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
-        }
-
         // write out the sun chunk
         if (scene->sun) {
-
             ogt_vox_sun* sun = scene->sun;
             char sun_intensity[32] = "";
             char sun_area[32] = "";
