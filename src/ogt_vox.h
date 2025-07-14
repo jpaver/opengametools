@@ -418,21 +418,23 @@
     // the scene parsed from a .vox file.
     typedef struct ogt_vox_scene
     {
-        uint32_t                num_models;     // number of models within the scene.
-        uint32_t                num_instances;  // number of instances in the scene (on anim frame 0)
-        uint32_t                num_layers;     // number of layers in the scene
-        uint32_t                num_groups;     // number of groups in the scene
-        uint32_t                num_color_names;// number of color names in the scene
-        const char**            color_names;    // array of color names. size is num_color_names
-        const ogt_vox_model**   models;         // array of models. size is num_models
-        const ogt_vox_instance* instances;      // array of instances. size is num_instances
-        const ogt_vox_layer*    layers;         // array of layers. size is num_layers
-        const ogt_vox_group*    groups;         // array of groups. size is num_groups
-        ogt_vox_palette         palette;        // the palette for this scene
-        ogt_vox_matl_array      materials;      // the extended materials for this scene
-        uint32_t                num_cameras;    // number of cameras for this scene
-        const ogt_vox_cam*      cameras;        // the cameras for this scene
-        ogt_vox_sun*            sun;            // sun - primary light at infinity
+        uint32_t                num_models;       // number of models within the scene.
+        uint32_t                num_instances;    // number of instances in the scene (on anim frame 0)
+        uint32_t                num_layers;       // number of layers in the scene
+        uint32_t                num_groups;       // number of groups in the scene
+        uint32_t                num_color_names;  // number of color names in the scene
+        const char**            color_names;      // array of color names. size is num_color_names
+        const ogt_vox_model**   models;           // array of models. size is num_models
+        const ogt_vox_instance* instances;        // array of instances. size is num_instances
+        const ogt_vox_layer*    layers;           // array of layers. size is num_layers
+        const ogt_vox_group*    groups;           // array of groups. size is num_groups
+        ogt_vox_palette         palette;          // the palette for this scene
+        ogt_vox_matl_array      materials;        // the extended materials for this scene
+        uint32_t                num_cameras;      // number of cameras for this scene
+        const ogt_vox_cam*      cameras;          // the cameras for this scene
+        ogt_vox_sun*            sun;              // sun - primary light at infinity
+        uint32_t                anim_range_start; // the start frame of the animation range for this scene (META chunk since 0.99.7.2)
+        uint32_t                anim_range_end;   // the end frame of the animation range for this scene (META chunk since 0.99.7.2)
     } ogt_vox_scene;
 
     // allocate memory function interface. pass in size, and get a pointer to memory with at least that size available.
@@ -532,6 +534,7 @@
     static const uint32_t CHUNK_ID_rOBJ = MAKE_VOX_CHUNK_ID('r','O','B','J');
     static const uint32_t CHUNK_ID_rCAM = MAKE_VOX_CHUNK_ID('r','C','A','M');
     static const uint32_t CHUNK_ID_NOTE = MAKE_VOX_CHUNK_ID('N','O','T','E');
+    static const uint32_t CHUNK_ID_META = MAKE_VOX_CHUNK_ID('M','E','T','A');
 
     static const uint32_t NAME_MAX_LEN     = 256;       // max name len = 255 plus 1 for null terminator
     static const uint32_t CHUNK_HEADER_LEN = 12;        // 4 bytes for each of: chunk_id, chunk_size, chunk_child_size
@@ -1473,6 +1476,8 @@
         bool                         found_index_map_chunk = false;
         ogt_vox_sun                  sun;
         bool                         found_sun = false;
+        uint32_t                     anim_range_start = 0;
+        uint32_t                     anim_range_end = 30;
 
         // size some of our arrays to prevent resizing during the parsing for smallish cases.
         model_ptrs.reserve(64);
@@ -1918,6 +1923,25 @@
                     ogt_assert(chunk_size >= 16u, "unexpected chunk size for MATT chunk");
                     const uint32_t remaining = chunk_size - 16u;
                     _vox_file_seek_forwards(fp, remaining);
+                    break;
+                }
+                case CHUNK_ID_META:
+                {
+                    _vox_file_read_dict(&dict, fp);
+                    const char* anim_range_string = _vox_dict_get_value_as_string(&dict, "_anim_range", NULL);
+                    if (anim_range_string) {
+                        // parse the animation range string, which is of the form "start_frame end_frame"
+                        int start_frame, end_frame;
+                        if (_vox_str_scanf(anim_range_string, "%d %d", &start_frame, &end_frame) == 2) {
+                            if (start_frame < 0 || end_frame < start_frame) {
+                                ogt_assert(false, "invalid animation range in META chunk");
+                            } else {
+                                // set the animation range
+                                anim_range_start = (uint32_t)start_frame;
+                                anim_range_end = (uint32_t)end_frame;
+                            }
+                        }
+                    }
                     break;
                 }
                 case CHUNK_ID_NOTE:
@@ -2382,6 +2406,9 @@
             }
         }
 
+        scene->anim_range_start = anim_range_start;
+        scene->anim_range_end = anim_range_end;
+
         if (g_progress_callback_func) {
             // we indicate progress as complete, but don't check for cancel as finished
             g_progress_callback_func(1.0f, g_progress_callback_user_data);
@@ -2796,6 +2823,25 @@
             _vox_file_write_dict_key_value(fp, "_radius", cam_radius);
             _vox_file_write_dict_key_value(fp, "_frustum", cam_frustum);
             _vox_file_write_dict_key_value(fp, "_fov", cam_fov);
+
+            // compute and patch up the chunk size in the chunk header
+            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+        }
+
+        // write out the META chunk
+        {
+            char anim_range[64] = "";
+            _vox_sprintf(anim_range, sizeof(anim_range), "%d %d", (int)scene->anim_range_start, (int)scene->anim_range_end);
+
+            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+            // write the META header
+            _vox_file_write_uint32(fp, CHUNK_ID_META);
+            _vox_file_write_uint32(fp, 0); // chunk_size will get patched up later
+            _vox_file_write_uint32(fp, 0);
+
+            _vox_file_write_uint32(fp, 1);  // num key values
+            _vox_file_write_dict_key_value(fp, "_anim_range", anim_range);
 
             // compute and patch up the chunk size in the chunk header
             uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
