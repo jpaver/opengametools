@@ -443,6 +443,7 @@
     // free memory function interface. pass in a pointer previously allocated and it will be released back to the system managing memory.
     typedef void  (*ogt_vox_free_func)(void* ptr);
 
+extern "C" {
     // override the default scene memory allocator if you need to control memory precisely.
     void  ogt_vox_set_memory_allocator(ogt_vox_alloc_func alloc_func, ogt_vox_free_func free_func);
     void* ogt_vox_malloc(size_t size);
@@ -495,6 +496,7 @@
     //  ogt_vox_sample_group_transform_local returns the transform relative to its parent group
     ogt_vox_transform ogt_vox_sample_group_transform_global(const ogt_vox_group* group, uint32_t frame_index, const ogt_vox_scene* scene);
     ogt_vox_transform ogt_vox_sample_group_transform_local(const ogt_vox_group* group, uint32_t frame_index);
+} // extern "C"
 
 #endif // OGT_VOX_H__
 
