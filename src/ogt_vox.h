@@ -227,6 +227,7 @@
     #define _vox_le32toh(x)  (x)
 #endif
 
+extern "C" {
     // denotes an invalid group index. Usually this is only applicable to the scene's root group's parent.
     static const uint32_t k_invalid_group_index = UINT32_MAX;
 
@@ -443,7 +444,6 @@
     // free memory function interface. pass in a pointer previously allocated and it will be released back to the system managing memory.
     typedef void  (*ogt_vox_free_func)(void* ptr);
 
-extern "C" {
     // override the default scene memory allocator if you need to control memory precisely.
     void  ogt_vox_set_memory_allocator(ogt_vox_alloc_func alloc_func, ogt_vox_free_func free_func);
     void* ogt_vox_malloc(size_t size);
