@@ -95,6 +95,9 @@
     instance has a transform that determines its position and orientation within the scene,
     but it also has an index that specifies which model the instance uses for its shape. It
     is expected that there is a many-to-one mapping of instances to models.
+    Instances can overlap. For file version 200 (or perhaps higher) lower instance numbers are
+    more important and would overwrite existing voxels on merging, for version < 200 the higher
+    numbers are more important.
 
     An ogt_vox_layer is used to conceptually group instances. Each instance indexes the
     layer that it belongs to, but the layer itself has its own name and hidden/shown state.
@@ -418,6 +421,7 @@
     // the scene parsed from a .vox file.
     typedef struct ogt_vox_scene
     {
+        uint32_t                file_version;     // version of the .vox file format.
         uint32_t                num_models;       // number of models within the scene.
         uint32_t                num_instances;    // number of instances in the scene (on anim frame 0)
         uint32_t                num_layers;       // number of layers in the scene
@@ -2408,6 +2412,7 @@
 
         scene->anim_range_start = anim_range_start;
         scene->anim_range_end = anim_range_end;
+        scene->file_version = file_version;
 
         if (g_progress_callback_func) {
             // we indicate progress as complete, but don't check for cancel as finished
