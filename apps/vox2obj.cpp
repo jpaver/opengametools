@@ -12,7 +12,7 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-// if min/max are not already defined, windows.h defines them, which breaks std::min/std::max. 
+// if min/max are not already defined, windows.h defines them, which breaks std::min/std::max.
 // we can safely undefine them after we've included windows.h
 #define max
 #define min
@@ -300,7 +300,7 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
             return false;
         }
         printf("writing file %s\n", out_material_name.c_str());
-        fprintf(fout, "# opengametools vox2animobj - see source code at https://github.com/jpaver/opengametools/tree/master/apps/vox2animobj.cpp\r\n"); // TODO(jpaver) proper header
+        fprintf(fout, "# opengametools vox2obj - see source code at https://github.com/jpaver/opengametools/tree/master/apps/vox2obj.cpp\r\n"); // TODO(jpaver) proper header
         fprintf(fout, "\r\n");
         fprintf(fout, "newmtl palette\r\n");
         fprintf(fout, "illum 1\r\n");
@@ -439,12 +439,12 @@ bool export_scene_anim_as_obj(const ogt_vox_scene* scene, const std::string& out
 void print_help()
 {
     printf(
-        "vox2animobj v2.0 by Justin Paver - source code available here: http://github.com/jpaver/opengametools \n"
+        "vox2obj v2.0 by Justin Paver - source code available here: http://github.com/jpaver/opengametools \n"
         "\n"
         "This tool can extract frames out of a given MagicaVoxel.vox and save them either as separate .obj files,\n"
         " or as a single .obj file with separate internal objects for each frame.\n"
         "\n"
-        " usage: vox2animobj [optional args] <input_file.vox>\n"
+        " usage: vox2obj [optional args] <input_file.vox>\n"
         "\n"
         " [optional args] can be one or multiple of:\n"
         " --mesh_algorithm <algo> : (default: polygon) sets the meshing mode where <algo> is one of: simple, greedy or polygon\n"
@@ -455,7 +455,7 @@ void print_help()
         " --output_vox            : (default: disabled): if specified will output .vox files for each frame instead of .obj"
         "\n"
         "example:\n"
-        "  vox2animobj --mesh_algorithm polygon --output_name test --frames 0 119 --scale scene.vox\n"
+        "  vox2obj --mesh_algorithm polygon --output_name test --frames 0 119 --scale scene.vox\n"
         "\n"
         "The above example uses polygon tessellation. will generate test.mtl/test.tga and the test.obj will contain 120 objects,\n"
         "with each object representing a mesh of the entire frame within scene.vox\n"
