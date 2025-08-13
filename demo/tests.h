@@ -9,6 +9,21 @@
 #endif
 #include <stdio.h>
 
+inline uint32_t count_solid_voxels_in_model(const ogt_vox_model *model) {
+  uint32_t solid_voxel_count = 0;
+  uint32_t voxel_index = 0;
+  for (uint32_t z = 0; z < model->size_z; z++) {
+    for (uint32_t y = 0; y < model->size_y; y++) {
+      for (uint32_t x = 0; x < model->size_x; x++, voxel_index++) {
+        uint32_t color_index = model->voxel_data[voxel_index];
+        bool is_voxel_solid = (color_index != 0);
+        solid_voxel_count += (is_voxel_solid ? 1 : 0);
+      }
+    }
+  }
+  return solid_voxel_count;
+}
+
 // a helper function to load a magica voxel scene given a filename.
 inline const ogt_vox_scene *load_vox_scene(const char *filename,
                                            uint32_t scene_read_flags = 0) {
@@ -139,8 +154,10 @@ inline const char *loadsave_vox_scene(const char *filename) {
   static int prevFailed = 0;                                                   \
   static char errorBuf[4096] = "";                                             \
   static int lastExpectedInt = 0;                                              \
+  static unsigned int lastExpectedUInt = 0;                                    \
   static float lastExpectedFloat = 0.0f;                                       \
   static const char *lastExpectedString = nullptr;                             \
+  static bool lastExpectedBool = false;                                        \
   static int runDisabled = 0;
 
 #define TESTS_SHUTDOWN()                                                       \
@@ -152,8 +169,10 @@ inline const char *loadsave_vox_scene(const char *filename) {
 
 #define TESTS_INIT()                                                           \
   (void)lastExpectedInt;                                                       \
+  (void)lastExpectedUInt;                                                      \
   (void)lastExpectedFloat;                                                     \
   (void)lastExpectedString;                                                    \
+  (void)lastExpectedBool;                                                      \
   (void)runDisabled;                                                           \
   (void)failed;                                                                \
   (void)tests;                                                                 \
@@ -165,6 +184,24 @@ inline const char *loadsave_vox_scene(const char *filename) {
       printf("--also_run_disabled_tests : also run disabled tests");           \
       return 0;                                                                \
     }                                                                          \
+  }
+
+#define EXPECT_TRUE(actual)                                                    \
+  if (lastExpectedBool = (actual),                                             \
+      lastExpectedBool == false) {                                             \
+    snprintf(errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf), \
+             " - " TEST_STRINGIFY(                                             \
+                 actual) ": expected true (line %i)\n", __LINE__);             \
+    ++failed;                                                                  \
+  }
+
+#define EXPECT_FALSE(actual)                                                   \
+  if (lastExpectedBool = (actual),                                             \
+      lastExpectedBool == true) {                                              \
+    snprintf(errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf), \
+             " - " TEST_STRINGIFY(                                             \
+                 actual) ": expected false (line %i)\n", __LINE__);            \
+    ++failed;                                                                  \
   }
 
 #define ASSERT_EQ_FLOAT(exp, actual)                                           \
@@ -204,6 +241,25 @@ inline const char *loadsave_vox_scene(const char *filename) {
         errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
         " - " TEST_STRINGIFY(actual) ": expected %i, but got %i (line %i)\n",  \
         exp, lastExpectedInt, __LINE__);                                       \
+    ++failed;                                                                  \
+  }
+
+#define ASSERT_EQ_UINT(exp, actual)                                            \
+  if (lastExpectedUInt = (actual), (exp) != lastExpectedUInt) {                \
+    snprintf(                                                                  \
+        errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
+        " - " TEST_STRINGIFY(actual) ": expected %u, but got %u (line %i)\n",  \
+        exp, lastExpectedUInt, __LINE__);                                      \
+    ++failed;                                                                  \
+    return;                                                                    \
+  }
+
+#define EXPECT_EQ_UINT(exp, actual)                                            \
+  if (lastExpectedUInt = (actual), (exp) != lastExpectedUInt) {                \
+    snprintf(                                                                  \
+        errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
+        " - " TEST_STRINGIFY(actual) ": expected %u, but got %u (line %i)\n",  \
+        exp, lastExpectedUInt, __LINE__);                                      \
     ++failed;                                                                  \
   }
 
@@ -268,6 +324,25 @@ inline const char *loadsave_vox_scene(const char *filename) {
     snprintf(                                                                  \
         errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
         " - " TEST_STRINGIFY(actual) ": expected to be not null (line %i)\n",  \
+        __LINE__);                                                             \
+    ++failed;                                                                  \
+    return;                                                                    \
+  }
+
+#define EXPECT_EQ_NULLPTR(actual)                                              \
+  if ((actual) != nullptr) {                                                   \
+    snprintf(                                                                  \
+        errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
+        " - " TEST_STRINGIFY(actual) ": expected to be null (line %i)\n",      \
+        __LINE__);                                                             \
+    ++failed;                                                                  \
+  }
+
+#define ASSERT_EQ_NULLPTR(actual)                                              \
+  if ((actual) != nullptr) {                                                   \
+    snprintf(                                                                  \
+        errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
+        " - " TEST_STRINGIFY(actual) ": expected to be null (line %i)\n",      \
         __LINE__);                                                             \
     ++failed;                                                                  \
     return;                                                                    \
