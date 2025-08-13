@@ -232,6 +232,8 @@
 
     // denotes an invalid group index. Usually this is only applicable to the scene's root group's parent.
     static const uint32_t k_invalid_group_index = UINT32_MAX;
+    // denotes an invalid layer index. Can happen for instances and groups at least.
+    static const uint32_t k_invalid_layer_index = UINT32_MAX;
 
     // color
     typedef struct ogt_vox_rgba
