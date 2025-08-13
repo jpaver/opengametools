@@ -18,6 +18,7 @@ static void testMetaChunk(void) {
   ASSERT_NE_NULLPTR(scene);
   EXPECT_EQ_INT(7, (int)scene->anim_range_start);
   EXPECT_EQ_INT(36, (int)scene->anim_range_end);
+  EXPECT_EQ_INT(150, (int)scene->file_version);
 }
 
 int main(int argc, char *argv[]) {
