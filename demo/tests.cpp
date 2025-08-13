@@ -5,14 +5,14 @@ TESTS_GLOBALS();
 static void testLoadScene(void) {
   const ogt_vox_scene *scene = load_vox_scene_with_groups("test_meta_chunk.vox");
   ASSERT_NE_NULLPTR(scene);
-  EXPECT_EQ_INT(7, (int)scene->anim_range_start);
-  EXPECT_EQ_INT(36, (int)scene->anim_range_end);
-  EXPECT_EQ_INT(200, (int)scene->file_version);
+  EXPECT_EQ_UINT(7u, scene->anim_range_start);
+  EXPECT_EQ_UINT(36u, scene->anim_range_end);
+  EXPECT_EQ_UINT(200u, scene->file_version);
 
-  EXPECT_EQ_INT(10, (int)scene->num_cameras);
+  EXPECT_EQ_UINT(10u, scene->num_cameras);
   ASSERT_NE_NULLPTR(scene->cameras);
 
-  ASSERT_EQ_INT(1, (int)scene->num_models);
+  ASSERT_EQ_UINT(1u, scene->num_models);
   ASSERT_NE_NULLPTR(scene->models);
   const ogt_vox_model *model = scene->models[0];
   EXPECT_EQ_UINT(64000u, count_solid_voxels_in_model(model));
@@ -41,7 +41,7 @@ static void testLoadScene(void) {
   EXPECT_EQ_UINT(k_invalid_layer_index, group.layer_index);
   EXPECT_FALSE(group.hidden);
 
-  EXPECT_EQ_INT(32, (int)scene->num_color_names);
+  EXPECT_EQ_UINT(32u, scene->num_color_names);
   ASSERT_NE_NULLPTR(scene->color_names);
   EXPECT_EQ_STRING("NOTE", scene->color_names[0]);
 }
