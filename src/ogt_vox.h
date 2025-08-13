@@ -2616,7 +2616,8 @@
 
         // write file header and file version
         _vox_file_write_uint32(fp, CHUNK_ID_VOX_);
-        _vox_file_write_uint32(fp, 150);
+        uint32_t version = scene->file_version > 0u ? scene->file_version : 150u; // default to 150 if not specified
+        _vox_file_write_uint32(fp, version);
 
         // write the main chunk
         _vox_file_write_uint32(fp, CHUNK_ID_MAIN);
@@ -2627,7 +2628,7 @@
         const uint32_t offset_post_main_chunk = _vox_file_get_offset(fp);
 
         // write out the META chunk
-        {
+        if (version >= 200u) {
             char anim_range[64] = "";
             _vox_sprintf(anim_range, sizeof(anim_range), "%d %d", (int)scene->anim_range_start, (int)scene->anim_range_end);
 
