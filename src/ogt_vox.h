@@ -235,6 +235,8 @@
     static const uint32_t k_invalid_group_index = UINT32_MAX;
     // denotes an invalid layer index. Can happen for instances and groups at least.
     static const uint32_t k_invalid_layer_index = UINT32_MAX;
+    // denotes an invalid node index. Internal use only.
+    static const uint32_t k_invalid_node_index = UINT32_MAX;
 
     // color
     typedef struct ogt_vox_rgba
@@ -400,6 +402,7 @@
         bool                   hidden;                 // whether this instance is individually hidden or not. Note: the instance can also be hidden when its layer is hidden, or if it belongs to a group that is hidden.
         ogt_vox_anim_transform transform_anim;         // animation for the transform
         ogt_vox_anim_model     model_anim;             // animation for the model_index
+        mutable uint32_t       _nodeId;                // internal use during save to ensure order is preserved, this is nodeId of nTRN node, always follwed by nSHP for instances.
     } ogt_vox_instance;
 
     // describes a layer within the scene
@@ -419,7 +422,8 @@
         uint32_t               layer_index;             // which layer this group belongs to. used to lookup the layer in the scene's layers[] array.
         bool                   hidden;                  // whether this group is hidden or not.
         ogt_vox_anim_transform transform_anim;          // animated transform data
-    } ogt_vox_group;
+        mutable uint32_t       _nodeId;                 // internal use during save to ensure order is preserved, this is nodeId of nTRN node, always follwed by nGRP for groups
+} ogt_vox_group;
 
     // the scene parsed from a .vox file.
     typedef struct ogt_vox_scene
@@ -2618,6 +2622,118 @@
         _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
     }
 
+    static void _vox_file_write_chunks_group(_vox_file_writeable* fp, const ogt_vox_scene* scene, uint32_t group_index)
+    {
+        const ogt_vox_group* group = &scene->groups[group_index];
+        // write the nTRN node
+        _vox_file_write_chunk_nTRN(fp, group->_nodeId, group->_nodeId + 1, group->name, group->hidden, &group->transform, group->layer_index, &group->transform_anim);
+
+        // count how many childnodes  there are. This is simply the sum of all
+        // groups and instances that have this group as its parent
+        uint32_t num_child_nodes = 0;
+        for (uint32_t child_group_index = 0; child_group_index < scene->num_groups; child_group_index++)
+            if (scene->groups[child_group_index].parent_group_index == group_index)
+                num_child_nodes++;
+        for (uint32_t child_instance_index = 0; child_instance_index < scene->num_instances; child_instance_index++)
+            if (scene->instances[child_instance_index].group_index == group_index)
+                num_child_nodes++;
+
+        // count number of dictionary items
+        const char* hidden_string = scene->groups[group_index].hidden ? "1" : NULL;
+        uint32_t group_dict_keyvalue_count = (hidden_string ? 1 : 0);
+
+        // compute the chunk size.
+        uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+
+        // write the nGRP header
+        _vox_file_write_uint32(fp, CHUNK_ID_nGRP);
+        _vox_file_write_uint32(fp, 0); // chunk_size will get patched up after.
+        _vox_file_write_uint32(fp, 0);
+        // write the nGRP payload
+        _vox_file_write_uint32(fp, group->_nodeId + 1);       // nGRP is +1 after nTRN
+        _vox_file_write_uint32(fp, group_dict_keyvalue_count); // num keyvalue pairs in node dictionary
+        _vox_file_write_dict_key_value(fp, "_hidden", hidden_string);
+        _vox_file_write_uint32(fp, num_child_nodes);
+
+        // child nodes must be written out in node order to preserve .vox ordering
+        // we know instances are ordered but groups may not be, and we do not know relative ordering
+        uint32_t nextGroupIndex = 0;
+        uint32_t nextInstanceIndex = 0;
+        while (num_child_nodes) {
+            while (nextGroupIndex < scene->num_groups && scene->groups[nextGroupIndex].parent_group_index != group_index) {
+                ++nextGroupIndex;
+            }
+            while (nextInstanceIndex < scene->num_instances && scene->instances[nextInstanceIndex].group_index != group_index) {
+                ++nextInstanceIndex;
+            }
+
+            uint32_t nodeIdGroup = k_invalid_node_index;
+            if (nextGroupIndex < scene->num_groups) {
+                nodeIdGroup = scene->groups[nextGroupIndex]._nodeId;
+            }
+
+            uint32_t nodeIdInstance = k_invalid_node_index;
+            if (nextInstanceIndex < scene->num_instances) {
+                nodeIdInstance = scene->instances[nextInstanceIndex]._nodeId;
+            }
+
+            if (nodeIdGroup < nodeIdInstance) {
+                ogt_assert(nodeIdGroup != k_invalid_node_index, "error in group ordering calculation");
+                _vox_file_write_uint32(fp, nodeIdGroup);
+                ++nextGroupIndex;
+                --num_child_nodes;
+            } else {
+                ogt_assert(nodeIdInstance != k_invalid_node_index, "error in index ordering calculation");
+                _vox_file_write_uint32(fp, nodeIdInstance);
+                ++nextInstanceIndex;
+                --num_child_nodes;
+            }
+        }
+
+        uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+        _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+    }
+
+    static void _vox_file_write_chunks_instance(_vox_file_writeable* fp, const ogt_vox_scene* scene, uint32_t instance_index)
+    {
+        const ogt_vox_instance* instance = &scene->instances[instance_index];
+
+        uint32_t node_id       = instance->_nodeId;
+        uint32_t child_node_id = instance->_nodeId + 1;
+        _vox_file_write_chunk_nTRN(fp, node_id, child_node_id, instance->name, instance->hidden, &instance->transform, instance->layer_index, &instance->transform_anim);
+
+        uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+        // write the nSHP chunk header
+        _vox_file_write_uint32(fp, CHUNK_ID_nSHP);
+        _vox_file_write_uint32(fp, 0); // will get patched up at the end
+        _vox_file_write_uint32(fp, 0);
+        // write the nSHP chunk payload
+        _vox_file_write_uint32(fp, instance->_nodeId + 1);    // nSHP is +1 after nTRN
+
+        // write the nSHP node dictionary
+        const char* loop_string = instance->model_anim.loop ? "1" : NULL;
+        uint32_t node_dict_keyvalue_count = (loop_string ? 1 : 0);
+        _vox_file_write_uint32(fp, node_dict_keyvalue_count);  // num key values
+        _vox_file_write_dict_key_value(fp, "_loop",   loop_string);
+
+        if (instance->model_anim.num_keyframes == 0 ) {
+            _vox_file_write_uint32(fp, 1);                      // num_models must be 1
+            _vox_file_write_uint32(fp, instance->model_index);  // model_id
+            _vox_file_write_uint32(fp, 0);                      // num keyvalue pairs in model dictionary
+        }
+        else {
+            _vox_file_write_uint32(fp, instance->model_anim.num_keyframes);
+            for (uint32_t j = 0; j < instance->model_anim.num_keyframes; j++) {
+                _vox_file_write_uint32(fp, instance->model_anim.keyframes[j].model_index); // model_id
+                _vox_file_write_uint32(fp, 1); // num keyvalue pairs in model dictionary
+                _vox_file_write_dict_key_value_uint32(fp, "_f", instance->model_anim.keyframes[j].frame_index);
+            }
+        }
+        // compute and patch up the chunk size in the chunk header
+        uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+        _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+    }
+
     // saves the scene out to a buffer that when saved as a .vox file can be loaded with magicavoxel.
     uint8_t* ogt_vox_write_scene(const ogt_vox_scene* scene, uint32_t* buffer_size) {
         _vox_file_writeable file;
@@ -2713,99 +2829,88 @@
 
         // define our node_id ranges.
         ogt_assert(scene->num_groups > 0, "no groups found in scene");
-        uint32_t first_group_transform_node_id    = 0;
-        uint32_t first_group_node_id              = first_group_transform_node_id + scene->num_groups;
-        uint32_t first_shape_node_id              = first_group_node_id + scene->num_groups;
-        uint32_t first_instance_transform_node_id = first_shape_node_id + scene->num_instances;
 
-        // write the nTRN nodes for each of the groups in the scene.
+        // create scene ordering following instance order: groups must be exported when first seen in hierarchy
+        // we need to set all group node indices to k_invalid_node_index first
         for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
-            const ogt_vox_group* group = &scene->groups[group_index];
-            _vox_file_write_chunk_nTRN(fp, first_group_transform_node_id + group_index, first_group_node_id + group_index, group->name, group->hidden, &group->transform, group->layer_index, &group->transform_anim);
-        }
-        // write the group nodes for each of the groups in the scene
-        for (uint32_t group_index = 0; group_index < scene->num_groups; group_index++) {
-            // count how many childnodes  there are. This is simply the sum of all
-            // groups and instances that have this group as its parent
-            uint32_t num_child_nodes = 0;
-            for (uint32_t child_group_index = 0; child_group_index < scene->num_groups; child_group_index++)
-                if (scene->groups[child_group_index].parent_group_index == group_index)
-                    num_child_nodes++;
-            for (uint32_t child_instance_index = 0; child_instance_index < scene->num_instances; child_instance_index++)
-                if (scene->instances[child_instance_index].group_index == group_index)
-                    num_child_nodes++;
-
-            // count number of dictionary items
-            const char* hidden_string = scene->groups[group_index].hidden ? "1" : NULL;
-            uint32_t group_dict_keyvalue_count = (hidden_string ? 1 : 0);
-
-            // compute the chunk size.
-            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
-
-            // write the nGRP header
-            _vox_file_write_uint32(fp, CHUNK_ID_nGRP);
-            _vox_file_write_uint32(fp, 0); // chunk_size will get patched up after.
-            _vox_file_write_uint32(fp, 0);
-            // write the nGRP payload
-            _vox_file_write_uint32(fp, first_group_node_id + group_index);       // node_id
-            _vox_file_write_uint32(fp, group_dict_keyvalue_count); // num keyvalue pairs in node dictionary
-            _vox_file_write_dict_key_value(fp, "_hidden", hidden_string);
-            _vox_file_write_uint32(fp, num_child_nodes);
-            // write the child group transform nodes
-            for (uint32_t child_group_index = 0; child_group_index < scene->num_groups; child_group_index++)
-                if (scene->groups[child_group_index].parent_group_index == group_index)
-                    _vox_file_write_uint32(fp, first_group_transform_node_id + child_group_index);
-            // write the child instance transform nodes
-            for (uint32_t child_instance_index = 0; child_instance_index < scene->num_instances; child_instance_index++)
-                if (scene->instances[child_instance_index].group_index == group_index)
-                    _vox_file_write_uint32(fp, first_instance_transform_node_id + child_instance_index);
-
-            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
-            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            scene->groups[group_index]._nodeId = k_invalid_node_index;
         }
 
-        // write out an nSHP chunk for each of the instances
+        // now allocate the nodeIds
+        uint32_t nodeId         = 0;
         for (uint32_t i = 0; i < scene->num_instances; i++) {
             const ogt_vox_instance* instance = &scene->instances[i];
-
-            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
-            // write the nSHP chunk header
-            _vox_file_write_uint32(fp, CHUNK_ID_nSHP);
-            _vox_file_write_uint32(fp, 0); // will get patched up at the end
-            _vox_file_write_uint32(fp, 0);
-            // write the nSHP chunk payload
-            _vox_file_write_uint32(fp, first_shape_node_id + i);    // node_id
-
-            // write the nSHP node dictionary
-            const char* loop_string = instance->model_anim.loop ? "1" : NULL;
-            uint32_t node_dict_keyvalue_count = (loop_string ? 1 : 0);
-            _vox_file_write_uint32(fp, node_dict_keyvalue_count);  // num key values
-            _vox_file_write_dict_key_value(fp, "_loop",   loop_string);
-
-            if (instance->model_anim.num_keyframes == 0 ) {
-                _vox_file_write_uint32(fp, 1);                      // num_models must be 1
-                _vox_file_write_uint32(fp, instance->model_index);  // model_id
-                _vox_file_write_uint32(fp, 0);                      // num keyvalue pairs in model dictionary
-            }
-            else {
-                _vox_file_write_uint32(fp, instance->model_anim.num_keyframes);
-                for (uint32_t j = 0; j < instance->model_anim.num_keyframes; j++) {
-                    _vox_file_write_uint32(fp, instance->model_anim.keyframes[j].model_index); // model_id
-                    _vox_file_write_uint32(fp, 1); // num keyvalue pairs in model dictionary
-                    _vox_file_write_dict_key_value_uint32(fp, "_f", instance->model_anim.keyframes[j].frame_index);
+            // count unassigned group nodes in hierarchy above this instance
+            uint32_t unassinged_groupIds = 0;
+            uint32_t group_index = instance->group_index;
+            while (group_index != k_invalid_group_index)
+            {
+                ogt_assert(group_index < scene->num_groups, "out of bounds group index");
+                const ogt_vox_group* group = &scene->groups[group_index];
+                if( group->_nodeId == k_invalid_node_index )
+                {
+                    group_index = scene->groups[group_index].parent_group_index;
+                    ++unassinged_groupIds;
+                }
+                else
+                {
+                    break;
                 }
             }
-            // compute and patch up the chunk size in the chunk header
-            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
-            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            // assign group node ids
+            group_index = instance->group_index;
+            uint32_t nodeIdGroupStart = nodeId;
+            nodeId += 2*unassinged_groupIds; // nTRNs + nGRP
+            while (unassinged_groupIds > 0 )
+            {
+                const ogt_vox_group* group = &scene->groups[group_index];
+                ogt_assert(group->_nodeId == k_invalid_node_index, "error in group hierarchy");
+                --unassinged_groupIds;
+                group->_nodeId = nodeIdGroupStart + (2*unassinged_groupIds); // nTRNs + nGRP
+                group_index = scene->groups[group_index].parent_group_index;
+            }
+            instance->_nodeId = nodeId;
+            nodeId += 2; // nTRNs + nSHP
         }
 
-        // write out a nTRN chunk for all instances - and make them point to the relevant nSHP chunk
+        // write out the nodes in order
+        // we know that the instance nodes are in order but group nodes may not be.
+        // we could do better than this algorithm by sorting groups
+        // note that in .vox there are no groups which do not have children
+        uint32_t earliest_unsaved_group_index    = 0;
+        uint32_t last_group_nodeId = 0;
+        uint32_t nodeIdToWrite = 0;
         for (uint32_t i = 0; i < scene->num_instances; i++) {
+
+            // check in instances for next item to save
             const ogt_vox_instance* instance = &scene->instances[i];
-            uint32_t node_id       = first_instance_transform_node_id + i;
-            uint32_t child_node_id = first_shape_node_id + i;
-            _vox_file_write_chunk_nTRN(fp, node_id, child_node_id, instance->name, instance->hidden, &instance->transform, instance->layer_index, &instance->transform_anim);
+            uint32_t groupsToWrite = instance->_nodeId - nodeIdToWrite;
+            while (instance->_nodeId - nodeIdToWrite)
+            {
+                // write out any groups
+                 const ogt_vox_group* group = &scene->groups[earliest_unsaved_group_index];
+                 if (nodeIdToWrite == group->_nodeId)
+                 {
+                    _vox_file_write_chunks_group(fp, scene, earliest_unsaved_group_index);
+                    nodeIdToWrite += 2;
+                    ++earliest_unsaved_group_index;
+                 }
+                 else
+                 {
+                     // we need to search for this node
+                     for (uint32_t group_index = earliest_unsaved_group_index; group_index < scene->num_groups; group_index++) {
+                         const ogt_vox_group* group = &scene->groups[group_index];
+                         if (nodeIdToWrite == group->_nodeId)
+                         {
+                            _vox_file_write_chunks_group(fp, scene, group_index);
+                            nodeIdToWrite += 2;
+                            break;
+                         }
+                     }
+                 }
+            }
+            _vox_file_write_chunks_instance(fp, scene, i);
+            nodeIdToWrite += 2;
         }
 
         // write out the rCAM chunks
