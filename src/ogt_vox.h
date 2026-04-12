@@ -467,6 +467,7 @@
     static const uint32_t k_read_scene_flags_keyframes                   = 1 << 1; // if specified, all instances and groups will contain keyframe data.
     static const uint32_t k_read_scene_flags_keep_empty_models_instances = 1 << 2; // if specified, all empty models and instances referencing those will be kept rather than culled.
     static const uint32_t k_read_scene_flags_keep_duplicate_models       = 1 << 3; // if specified, we do not de-duplicate models.
+    static const uint32_t k_read_scene_flags_allow_no_layers             = 1 << 4; // allow there to be no layers in the file, otherwise a default layer will be created and assigned
 
     // creates a scene from a vox file within a memory buffer of a given size.
     // you can destroy the input buffer once you have the scene as this function will allocate separate memory for the scene objecvt.
@@ -2183,7 +2184,7 @@
         }
 
         // if we didn't get a layer chunk -- just create a default layer.
-        if (layers.size() == 0) {
+        if (layers.size() == 0 && !k_read_scene_flags_allow_no_layers) {
             // go through all instances and ensure they are only mapped to layer 0
             for (uint32_t i = 0; i < instances.size(); i++)
                 instances[i].layer_index = 0;
@@ -2372,7 +2373,8 @@
             // copy layer pointers over to the scene
             size_t num_scene_layers = layers.size();
             ogt_vox_layer* scene_layers = (ogt_vox_layer*)_vox_malloc(sizeof(ogt_vox_layer) * num_scene_layers);
-            memcpy(scene_layers, &layers[0], sizeof(ogt_vox_layer) * num_scene_layers);
+            if (num_scene_layers)
+                memcpy(scene_layers, &layers[0], sizeof(ogt_vox_layer) * num_scene_layers);
             scene->layers     = scene_layers;
             scene->num_layers = (uint32_t)num_scene_layers;
 
