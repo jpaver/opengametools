@@ -296,6 +296,19 @@
     static const uint32_t k_ogt_vox_matl_have_sp     = 1 << 11;
     static const uint32_t k_ogt_vox_matl_have_g      = 1 << 12;
     static const uint32_t k_ogt_vox_matl_have_media  = 1 << 13;
+    // Refractive index determines how much light bends when entering or exiting the material.
+    // Used for material types glass and emit.
+    // The default value is usually 1.0, which means no refraction (like air).
+    // Higher values (e.g., 1.5 for glass, 2.4 for diamond) create stronger bending effects, making the material look more like real-world glass or transparent surfaces.
+    static const uint32_t k_ogt_vox_matl_have_ri      = 1 << 14;
+    static const uint32_t k_ogt_vox_matl_have_plastic = 1 << 15; // plastic coating weight [0,1]
+    static const uint32_t k_ogt_vox_matl_have_g0      = 1 << 16; // phase function lobe 0 (dual-lobe Henyey-Greenstein)
+    static const uint32_t k_ogt_vox_matl_have_g1      = 1 << 17; // phase function lobe 1
+    static const uint32_t k_ogt_vox_matl_have_gw      = 1 << 18; // weight between g0 and g1 lobes
+    static const uint32_t k_ogt_vox_matl_have_spec_p  = 1 << 19; // specular probability [0,1]
+    static const uint32_t k_ogt_vox_matl_have_absorb  = 1 << 20; // absorption coefficient for media
+    static const uint32_t k_ogt_vox_matl_have_scatter = 1 << 21; // scattering coefficient for media
+    static const uint32_t k_ogt_vox_matl_have_sss     = 1 << 22; // subsurface scattering
 
     // media type for blend, glass and cloud materials
     enum ogt_media_type {
@@ -309,22 +322,31 @@
     typedef struct ogt_vox_matl
     {
         uint32_t       content_flags; // set of k_ogt_vox_matl_* OR together to denote contents available
-        ogt_media_type media_type;    // media type for blend, glass and cloud materials
-        ogt_matl_type  type;
-        float          metal;
-        float          rough;         // roughness
-        float          spec;          // specular
-        float          ior;           // index of refraction
-        float          att;           // attenuation
-        float          flux;          // radiant flux (power)
-        float          emit;          // emissive
-        float          ldr;           // low dynamic range
-        float          trans;         // transparency
-        float          alpha;
-        float          d;             // density
-        float          sp;
-        float          g;
-        float          media;
+        ogt_media_type media_type;    // media type for blend, glass and cloud materials (0=absorb, 1=scatter, 2=emit, 3=sss)
+        ogt_matl_type  type;          // material type (0=diffuse, 1=metal, 2=glass, 3=emit, 4=blend, 5=media)
+        float          metal;         // metalness [0,1]. Blends between dielectric and conductor BRDF.
+        float          rough;         // surface roughness [0,1]. Controls microfacet GGX distribution width.
+        float          spec;          // specular reflectance at normal incidence [0,1]. Fresnel F0 for dielectrics.
+        float          ior;           // index of refraction [1,inf). For glass/transparent materials.
+        float          att;           // attenuation [0,inf). Beer-Lambert extinction for colored glass/media.
+        float          flux;          // radiant flux (power) [0,inf). Scales emissive intensity for area lights.
+        float          emit;          // emission weight [0,1]. Enables emissive contribution in path tracer.
+        float          ldr;           // LDR emission scale [0,inf). Multiplier when emit is used in LDR mode.
+        float          trans;         // transparency [0,1]. Blend between opaque and fully transparent.
+        float          alpha;         // alpha/opacity [0,1]. Partial transparency for rasterizer.
+        float          d;             // density [0,inf). Volumetric density for media/cloud materials.
+        float          sp;            // specular power/exponent. Legacy Phong-style specular control.
+        float          g;             // phase function anisotropy [-1,1]. Single-lobe Henyey-Greenstein. +forward/-back scatter.
+        float          media;         // media density [0,1]. Participating media volume density.
+        float          ri;            // refractive index (MV stores _ri as ior-1.0 internally)
+        float          plastic;       // plastic coating weight [0,1]. Adds a clear-coat dielectric layer.
+        float          g0;            // dual-lobe phase function: lobe 0 anisotropy [-1,1]
+        float          g1;            // dual-lobe phase function: lobe 1 anisotropy [-1,1]
+        float          gw;            // dual-lobe phase function: weight between g0 and g1 [0,1]
+        float          spec_p;        // specular probability [0,1]. MIS weight for specular vs diffuse sampling.
+        float          absorb;        // absorption coefficient [0,inf). For media materials.
+        float          scatter;       // scattering coefficient [0,inf). For media materials.
+        float          sss;           // subsurface scattering [0,inf). For media materials.
     } ogt_vox_matl;
 
     // Extended Material Chunk MATL array of materials
@@ -342,16 +364,68 @@
         float        radius;      // distance of camera position from target position, also controls frustum in MV for orthographic/isometric modes
         float        frustum;     // 'height' of near plane of frustum, either orthographic height in voxels or tan( fov/2.0f )
         int          fov;         // angle in degrees for height of field of view, ensure to set frustum as only used when changed in MV UI
+        float        aperture;    // lens aperture size for depth of field
+        uint32_t     blade_num;   // number of aperture blades (bokeh shape)
+        float        blade_rotation; // blade rotation angle in degrees
     } ogt_vox_cam;
 
+    // Sun / primary directional light (from rOBJ chunk where _type == "_inf")
     typedef struct ogt_vox_sun
     {
-        float        intensity;
-        float        area;     // 1.0 ~= 43.5 degrees
-        float        angle[2]; // elevation, azimuth
-        ogt_vox_rgba rgba;
-        bool         disk;     // visible sun disk
+        float        intensity; // sun intensity [0,inf), stored as "_i"
+        float        area;     // sun angular size, 1.0 ~= 43.5 degrees, stored as "_area"
+        float        angle[2]; // [elevation, azimuth] in degrees, stored as "_angle" = "elev azim"
+        ogt_vox_rgba rgba;     // sun color (RGB), stored as "_k" = "r g b"
+        bool         disk;     // visible sun disk in sky, stored as "_disk" = "0"/"1"
     } ogt_vox_sun;
+
+    // Atmosphere settings for path tracing (from rOBJ chunk where _type == "_atm")
+    // Controls Rayleigh/Mie/Ozone scattering for sky rendering
+    typedef struct ogt_vox_atmosphere
+    {
+        float        ray_density;      // Rayleigh scattering density [0,1]
+        ogt_vox_rgba ray_color;        // Rayleigh scattering color (RGB, stored as "_ray_k" = "r g b")
+        float        mie_density;      // Mie scattering density [0,1]
+        ogt_vox_rgba mie_color;        // Mie scattering color (RGB, stored as "_mie_k" = "r g b")
+        float        mie_g;            // Mie phase function anisotropy [-1,1] (Henyey-Greenstein g parameter)
+        float        o3_density;       // Ozone absorption density [0,1]
+        ogt_vox_rgba o3_color;         // Ozone absorption color (RGB, stored as "_o3_k" = "r g b")
+    } ogt_vox_atmosphere;
+
+    // Uniform fog settings (from rOBJ chunk where _type == "_fog_uni")
+    typedef struct ogt_vox_fog
+    {
+        float        density;          // fog extinction density [0,inf), stored as "_d"
+        ogt_vox_rgba color;            // fog color (RGB, stored as "_k" = "r g b")
+        float        height;           // fog height/falloff, stored as "_h"
+    } ogt_vox_fog;
+
+    // Post-processing / tone mapping (from rOBJ chunks where _type == "_tone" and "_bloom")
+    typedef struct ogt_vox_post_process
+    {
+        float        exposure;         // exposure compensation, stored as "_expo"
+        float        vignette;         // vignette intensity [0,1], stored as "_vig"
+        bool         aces;             // ACES filmic tone mapping enabled, stored as "_aces" = "0"/"1"
+        float        bloom_mix;        // bloom mix intensity [0,1], stored as "_mix" (or legacy "_bloom_mix")
+        float        bloom_scale;      // bloom scale [0,1], stored as "_scale" (or legacy "_bloom_scale")
+        float        bloom_aspect;     // bloom aspect ratio [0,1], stored as "_aspect" (or legacy "_bloom_aspect")
+        float        bloom_threshold;  // bloom luminance threshold, stored as "_threshold" (or legacy "_bloom_threshold")
+    } ogt_vox_post_process;
+
+    // Display settings (from multiple rOBJ chunks: _type == "_ground", "_edge", "_grid", "_setting")
+    typedef struct ogt_vox_display
+    {
+        ogt_vox_rgba ground_color;     // ground plane color, stored as "_color" in _ground chunk
+        float        ground_horizon;   // ground horizon height, stored as "_horizon" in _ground chunk
+        ogt_vox_rgba edge_color;       // voxel edge color, stored as "_color" in _edge chunk
+        float        edge_width;       // voxel edge width, stored as "_width" in _edge chunk
+        ogt_vox_rgba grid_color;       // grid color, stored as "_color" in _grid chunk
+        uint32_t     grid_spacing;     // grid spacing in voxels, stored as "_spacing" in _grid chunk
+        float        grid_width;       // grid line width, stored as "_width" in _grid chunk
+        bool         show_ground;      // ground plane visible, stored as "_ground" in _setting chunk
+        bool         show_grid;        // grid visible, stored as "_grid" in _setting chunk
+        bool         show_edge;        // voxel edges visible, stored as "_edge" in _setting chunk
+    } ogt_vox_display;
 
     // a 3-dimensional model of voxels
     typedef struct ogt_vox_model
@@ -440,6 +514,10 @@
         uint32_t                num_cameras;      // number of cameras for this scene
         const ogt_vox_cam*      cameras;          // the cameras for this scene
         ogt_vox_sun*            sun;              // sun - primary light at infinity
+        ogt_vox_atmosphere*     atmosphere;       // atmosphere (Rayleigh/Mie/Ozone scattering)
+        ogt_vox_fog*            fog;              // uniform fog
+        ogt_vox_post_process*   post_process;     // tone mapping and bloom
+        ogt_vox_display*        display;          // display settings (ground/edge/grid)
         uint32_t                anim_range_start; // the start frame of the animation range for this scene (META chunk since 0.99.7.2)
         uint32_t                anim_range_end;   // the end frame of the animation range for this scene (META chunk since 0.99.7.2)
     } ogt_vox_scene;
@@ -1489,6 +1567,14 @@
         bool                         found_index_map_chunk = false;
         ogt_vox_sun                  sun;
         bool                         found_sun = false;
+        ogt_vox_atmosphere           atmosphere;
+        bool                         found_atmosphere = false;
+        ogt_vox_fog                  fog;
+        bool                         found_fog = false;
+        ogt_vox_post_process         post_process;
+        bool                         found_post_process = false;
+        ogt_vox_display              display;
+        bool                         found_display = false;
         uint32_t                     anim_range_start = 0;
         uint32_t                     anim_range_end = 30;
 
@@ -1513,6 +1599,10 @@
         // zero initialize materials (this sets valid defaults)
         memset(&materials, 0, sizeof(materials));
         memset(&sun, 0, sizeof(sun));
+        memset(&atmosphere, 0, sizeof(atmosphere));
+        memset(&fog, 0, sizeof(fog));
+        memset(&post_process, 0, sizeof(post_process));
+        memset(&display, 0, sizeof(display));
 
         // load and validate fileheader and file version.
         uint32_t file_header = 0;
@@ -1830,8 +1920,8 @@
                     }
                     const char* ri_string = _vox_dict_get_value_as_string(&dict, "_ri", NULL);
                     if (ri_string) {
-                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_ior;
-                        materials.matl[material_id].ior = (float)atof(ri_string) - 1.0f;
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_ri;
+                        materials.matl[material_id].ri = (float)atof(ri_string);
                     }
                     const char* att_string = _vox_dict_get_value_as_string(&dict, "_att", NULL);
                     if (att_string) {
@@ -1882,6 +1972,46 @@
                     if (media_string) {
                         materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_media;
                         materials.matl[material_id].media = (float)atof(media_string);
+                    }
+                    const char* plastic_string = _vox_dict_get_value_as_string(&dict, "_plastic", NULL);
+                    if (plastic_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_plastic;
+                        materials.matl[material_id].plastic = (float)atof(plastic_string);
+                    }
+                    const char* g0_string = _vox_dict_get_value_as_string(&dict, "_g0", NULL);
+                    if (g0_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_g0;
+                        materials.matl[material_id].g0 = (float)atof(g0_string);
+                    }
+                    const char* g1_string = _vox_dict_get_value_as_string(&dict, "_g1", NULL);
+                    if (g1_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_g1;
+                        materials.matl[material_id].g1 = (float)atof(g1_string);
+                    }
+                    const char* gw_string = _vox_dict_get_value_as_string(&dict, "_gw", NULL);
+                    if (gw_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_gw;
+                        materials.matl[material_id].gw = (float)atof(gw_string);
+                    }
+                    const char* spec_p_string = _vox_dict_get_value_as_string(&dict, "_spec_p", NULL);
+                    if (spec_p_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_spec_p;
+                        materials.matl[material_id].spec_p = (float)atof(spec_p_string);
+                    }
+                    const char* absorb_string = _vox_dict_get_value_as_string(&dict, "_absorb", NULL);
+                    if (absorb_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_absorb;
+                        materials.matl[material_id].absorb = (float)atof(absorb_string);
+                    }
+                    const char* scatter_string = _vox_dict_get_value_as_string(&dict, "_scatter", NULL);
+                    if (scatter_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_scatter;
+                        materials.matl[material_id].scatter = (float)atof(scatter_string);
+                    }
+                    const char* sss_string = _vox_dict_get_value_as_string(&dict, "_sss", NULL);
+                    if (sss_string) {
+                        materials.matl[material_id].content_flags |= k_ogt_vox_matl_have_sss;
+                        materials.matl[material_id].sss = (float)atof(sss_string);
                     }
                     break;
                 }
@@ -2014,6 +2144,18 @@
                     if (fov_string) {
                         _vox_str_scanf(fov_string, "%i", &camera.fov);
                     }
+                    const char* aperture_string = _vox_dict_get_value_as_string(&dict, "_aperture", NULL);
+                    if (aperture_string) {
+                        _vox_str_scanf(aperture_string, "%f", &camera.aperture);
+                    }
+                    const char* blade_n_string = _vox_dict_get_value_as_string(&dict, "_blade_n", NULL);
+                    if (blade_n_string) {
+                        camera.blade_num = (uint32_t)atoi(blade_n_string);
+                    }
+                    const char* blade_r_string = _vox_dict_get_value_as_string(&dict, "_blade_r", NULL);
+                    if (blade_r_string) {
+                        _vox_str_scanf(blade_r_string, "%f", &camera.blade_rotation);
+                    }
 
                     cameras.push_back(camera);
                     break;
@@ -2052,6 +2194,188 @@
                             sun.rgba.r = (uint8_t)urgb[0]; sun.rgba.g = (uint8_t)urgb[1]; sun.rgba.b = (uint8_t)urgb[2];
                         }
                         sun.disk = _vox_dict_get_value_as_bool(&dict, "_disk", false);
+                    } else if (mode_string && !_vox_strcmp(mode_string, "_atm")) {
+                        if (!found_atmosphere) {
+                            memset(&atmosphere, 0, sizeof(atmosphere));
+                        }
+                        found_atmosphere = true;
+                        const char* s;
+                        s = _vox_dict_get_value_as_string(&dict, "_ray_d", NULL);
+                        if (s) {
+                            atmosphere.ray_density = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_ray_k", NULL);
+                        if (s) {
+                            uint32_t r, g, b;
+                            _vox_str_scanf(s, "%u %u %u", &r, &g, &b);
+                            atmosphere.ray_color = {(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_mie_d", NULL);
+                        if (s) {
+                            atmosphere.mie_density = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_mie_k", NULL);
+                        if (s) {
+                            uint32_t r, g, b;
+                            _vox_str_scanf(s, "%u %u %u", &r, &g, &b);
+                            atmosphere.mie_color = {(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_mie_g", NULL);
+                        if (s) {
+                            atmosphere.mie_g = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_o3_d", NULL);
+                        if (s) {
+                            atmosphere.o3_density = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_o3_k", NULL);
+                        if (s) {
+                            uint32_t r, g, b;
+                            _vox_str_scanf(s, "%u %u %u", &r, &g, &b);
+                            atmosphere.o3_color = {(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
+                        }
+                    } else if (mode_string && !_vox_strcmp(mode_string, "_fog_uni")) {
+                        if (!found_fog) {
+                            memset(&fog, 0, sizeof(fog));
+                        }
+                        found_fog = true;
+                        const char* s;
+                        s = _vox_dict_get_value_as_string(&dict, "_d", NULL);
+                        if (s) {
+                            fog.density = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_k", NULL);
+                        if (s) {
+                            uint32_t r, g, b;
+                            _vox_str_scanf(s, "%u %u %u", &r, &g, &b);
+                            fog.color = {(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_h", NULL);
+                        if (s) {
+                            fog.height = (float)atof(s);
+                        }
+                    } else if (mode_string && (!_vox_strcmp(mode_string, "_tone") || !_vox_strcmp(mode_string, "_post"))) {
+                        if (!found_post_process) {
+                            memset(&post_process, 0, sizeof(post_process));
+                        }
+                        found_post_process = true;
+                        const char* s;
+                        s = _vox_dict_get_value_as_string(&dict, "_expo", NULL);
+                        if (s) {
+                            post_process.exposure = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_vig", NULL);
+                        if (s) {
+                            post_process.vignette = (float)atof(s);
+                        }
+                        post_process.aces = _vox_dict_get_value_as_bool(&dict, "_aces", false);
+                        s = _vox_dict_get_value_as_string(&dict, "_bloom_mix", NULL);
+                        if (s) {
+                            post_process.bloom_mix = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_bloom_scale", NULL);
+                        if (s) {
+                            post_process.bloom_scale = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_bloom_aspect", NULL);
+                        if (s) {
+                            post_process.bloom_aspect = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_bloom_threshold", NULL);
+                        if (s) {
+                            post_process.bloom_threshold = (float)atof(s);
+                        }
+                    } else if (mode_string && (!_vox_strcmp(mode_string, "_bloom") || !_vox_strcmp(mode_string, "_post"))) {
+                        if (!found_post_process) {
+                            memset(&post_process, 0, sizeof(post_process));
+                        }
+                        found_post_process = true;
+                        const char* s;
+                        s = _vox_dict_get_value_as_string(&dict, "_mix", NULL);
+                        if (!s) {
+                            s = _vox_dict_get_value_as_string(&dict, "_bloom_mix", NULL);
+                        }
+                        if (s) {
+                            post_process.bloom_mix = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_scale", NULL);
+                        if (!s) {
+                            s = _vox_dict_get_value_as_string(&dict, "_bloom_scale", NULL);
+                        }
+                        if (s) {
+                            post_process.bloom_scale = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_aspect", NULL);
+                        if (!s) {
+                            s = _vox_dict_get_value_as_string(&dict, "_bloom_aspect", NULL);
+                        }
+                        if (s) {
+                            post_process.bloom_aspect = (float)atof(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_threshold", NULL);
+                        if (!s) {
+                            s = _vox_dict_get_value_as_string(&dict, "_bloom_threshold", NULL);
+                        }
+                        if (s) {
+                            post_process.bloom_threshold = (float)atof(s);
+                        }
+                    } else if (mode_string && !_vox_strcmp(mode_string, "_ground")) {
+                        if (!found_display) {
+                            memset(&display, 0, sizeof(display));
+                        }
+                        found_display = true;
+                        const char* s = _vox_dict_get_value_as_string(&dict, "_color", NULL);
+                        if (s) {
+                            uint32_t r, g, b;
+                            _vox_str_scanf(s, "%u %u %u", &r, &g, &b);
+                            display.ground_color = {(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_horizon", NULL);
+                        if (s) {
+                            display.ground_horizon = (float)atof(s);
+                        }
+                    } else if (mode_string && !_vox_strcmp(mode_string, "_edge")) {
+                        if (!found_display) {
+                            memset(&display, 0, sizeof(display));
+                        }
+                        found_display = true;
+                        const char* s = _vox_dict_get_value_as_string(&dict, "_color", NULL);
+                        if (s) {
+                            uint32_t r, g, b;
+                            _vox_str_scanf(s, "%u %u %u", &r, &g, &b);
+                            display.edge_color = {(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_width", NULL);
+                        if (s) {
+                            display.edge_width = (float)atof(s);
+                        }
+                    } else if (mode_string && !_vox_strcmp(mode_string, "_grid")) {
+                        if (!found_display) {
+                            memset(&display, 0, sizeof(display));
+                        }
+                        found_display = true;
+                        const char* s = _vox_dict_get_value_as_string(&dict, "_color", NULL);
+                        if (s) {
+                            uint32_t r, g, b;
+                            _vox_str_scanf(s, "%u %u %u", &r, &g, &b);
+                            display.grid_color = {(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_spacing", NULL);
+                        if (s) {
+                            display.grid_spacing = (uint32_t)atoi(s);
+                        }
+                        s = _vox_dict_get_value_as_string(&dict, "_width", NULL);
+                        if (s) {
+                            display.grid_width = (float)atof(s);
+                        }
+                    } else if (mode_string && !_vox_strcmp(mode_string, "_setting")) {
+                        if (!found_display) {
+                            memset(&display, 0, sizeof(display));
+                        }
+                        found_display = true;
+                        display.show_ground = _vox_dict_get_value_as_bool(&dict, "_ground", false);
+                        display.show_grid = _vox_dict_get_value_as_bool(&dict, "_grid", false);
+                        display.show_edge = _vox_dict_get_value_as_bool(&dict, "_edge", false);
                     }
                     break;
                 }
@@ -2418,6 +2742,26 @@
                 scene->sun = (ogt_vox_sun*)_vox_malloc(sizeof(ogt_vox_sun));
                 *scene->sun = sun;
             }
+            // copy the atmosphere
+            if (found_atmosphere) {
+                scene->atmosphere = (ogt_vox_atmosphere*)_vox_malloc(sizeof(ogt_vox_atmosphere));
+                *scene->atmosphere = atmosphere;
+            }
+            // copy the fog
+            if (found_fog) {
+                scene->fog = (ogt_vox_fog*)_vox_malloc(sizeof(ogt_vox_fog));
+                *scene->fog = fog;
+            }
+            // copy the post-processing settings
+            if (found_post_process) {
+                scene->post_process = (ogt_vox_post_process*)_vox_malloc(sizeof(ogt_vox_post_process));
+                *scene->post_process = post_process;
+            }
+            // copy the display settings
+            if (found_display) {
+                scene->display = (ogt_vox_display*)_vox_malloc(sizeof(ogt_vox_display));
+                *scene->display = display;
+            }
         }
 
         scene->anim_range_start = anim_range_start;
@@ -2474,6 +2818,26 @@
         if (scene->sun) {
             _vox_free(scene->sun);
             scene->sun = NULL;
+        }
+        // free atmosphere
+        if (scene->atmosphere) {
+            _vox_free(scene->atmosphere);
+            scene->atmosphere = NULL;
+        }
+        // free fog
+        if (scene->fog) {
+            _vox_free(scene->fog);
+            scene->fog = NULL;
+        }
+        // free post-processing
+        if (scene->post_process) {
+            _vox_free(scene->post_process);
+            scene->post_process = NULL;
+        }
+        // free display settings
+        if (scene->display) {
+            _vox_free(scene->display);
+            scene->display = NULL;
         }
         // finally, free the scene.
         _vox_free(scene);
@@ -2816,12 +3180,18 @@
             char cam_radius[32] = "";
             char cam_frustum[32] = "";
             char cam_fov[32] = "";
+            char cam_aperture[32] = "";
+            char cam_blade_num[32] = "";
+            char cam_blade_rotation[32] = "";
             const char *cam_mode;
             _vox_sprintf(cam_focus, sizeof(cam_focus), "%.5f %.5f %.5f", camera->focus[0], camera->focus[1], camera->focus[2]);
             _vox_sprintf(cam_angle, sizeof(cam_angle), "%.5f %.5f %.5f", camera->angle[0], camera->angle[1], camera->angle[2]);
             _vox_sprintf(cam_radius, sizeof(cam_radius), "%.5f", camera->radius);
             _vox_sprintf(cam_frustum, sizeof(cam_frustum), "%.5f", camera->frustum);
             _vox_sprintf(cam_fov, sizeof(cam_fov), "%i", camera->fov);
+            _vox_sprintf(cam_aperture, sizeof(cam_aperture), "%.5f", camera->aperture);
+            _vox_sprintf(cam_blade_num, sizeof(cam_blade_num), "%u", camera->blade_num);
+            _vox_sprintf(cam_blade_rotation, sizeof(cam_blade_rotation), "%.5f", camera->blade_rotation);
 
             switch (camera->mode) {
             case ogt_cam_mode_free:
@@ -2851,13 +3221,16 @@
             _vox_file_write_uint32(fp, 0);
 
             _vox_file_write_uint32(fp, camera->camera_id);
-            _vox_file_write_uint32(fp, 6);  // num key values
+            _vox_file_write_uint32(fp, 9);  // num key values
             _vox_file_write_dict_key_value(fp, "_mode", cam_mode);
             _vox_file_write_dict_key_value(fp, "_focus", cam_focus);
             _vox_file_write_dict_key_value(fp, "_angle", cam_angle);
             _vox_file_write_dict_key_value(fp, "_radius", cam_radius);
             _vox_file_write_dict_key_value(fp, "_frustum", cam_frustum);
             _vox_file_write_dict_key_value(fp, "_fov", cam_fov);
+            _vox_file_write_dict_key_value(fp, "_aperture", cam_aperture);
+            _vox_file_write_dict_key_value(fp, "_blade_n", cam_blade_num);
+            _vox_file_write_dict_key_value(fp, "_blade_r", cam_blade_rotation);
 
             // compute and patch up the chunk size in the chunk header
             uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
@@ -2874,7 +3247,7 @@
 
             _vox_sprintf(sun_intensity, sizeof(sun_intensity), "%.5f", sun->intensity);
             _vox_sprintf(sun_area, sizeof(sun_area), "%.5f", sun->area);
-            _vox_sprintf(sun_angle, sizeof(sun_angle), "%i %i", (int32_t)sun->angle[0], (int32_t)sun->angle[1]);
+            _vox_sprintf(sun_angle, sizeof(sun_angle), "%.5f %.5f", sun->angle[0], sun->angle[1]);
             _vox_sprintf(sun_rgba, sizeof(sun_rgba), "%u %u %u", sun->rgba.r, sun->rgba.g, sun->rgba.b);
             const char* sun_disk = sun->disk ? "1" : "0";
 
@@ -2896,6 +3269,199 @@
             // compute and patch up the chunk size in the chunk header
             uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
             _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+        }
+
+        if (scene->atmosphere) {
+            const ogt_vox_atmosphere* atmosphere = scene->atmosphere;
+            char ray_density[32] = "";
+            char ray_color[64] = "";
+            char mie_density[32] = "";
+            char mie_color[64] = "";
+            char mie_g[32] = "";
+            char o3_density[32] = "";
+            char o3_color[64] = "";
+
+            _vox_sprintf(ray_density, sizeof(ray_density), "%.5f", atmosphere->ray_density);
+            _vox_sprintf(ray_color, sizeof(ray_color), "%u %u %u", atmosphere->ray_color.r, atmosphere->ray_color.g, atmosphere->ray_color.b);
+            _vox_sprintf(mie_density, sizeof(mie_density), "%.5f", atmosphere->mie_density);
+            _vox_sprintf(mie_color, sizeof(mie_color), "%u %u %u", atmosphere->mie_color.r, atmosphere->mie_color.g, atmosphere->mie_color.b);
+            _vox_sprintf(mie_g, sizeof(mie_g), "%.5f", atmosphere->mie_g);
+            _vox_sprintf(o3_density, sizeof(o3_density), "%.5f", atmosphere->o3_density);
+            _vox_sprintf(o3_color, sizeof(o3_color), "%u %u %u", atmosphere->o3_color.r, atmosphere->o3_color.g, atmosphere->o3_color.b);
+
+            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+            _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+            _vox_file_write_uint32(fp, 0);
+            _vox_file_write_uint32(fp, 0);
+
+            _vox_file_write_uint32(fp, 8);
+            _vox_file_write_dict_key_value(fp, "_type", "_atm");
+            _vox_file_write_dict_key_value(fp, "_ray_d", ray_density);
+            _vox_file_write_dict_key_value(fp, "_ray_k", ray_color);
+            _vox_file_write_dict_key_value(fp, "_mie_d", mie_density);
+            _vox_file_write_dict_key_value(fp, "_mie_k", mie_color);
+            _vox_file_write_dict_key_value(fp, "_mie_g", mie_g);
+            _vox_file_write_dict_key_value(fp, "_o3_d", o3_density);
+            _vox_file_write_dict_key_value(fp, "_o3_k", o3_color);
+
+            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+        }
+
+        if (scene->fog) {
+            const ogt_vox_fog* fog = scene->fog;
+            char density[32] = "";
+            char color[64] = "";
+            char height[32] = "";
+
+            _vox_sprintf(density, sizeof(density), "%.5f", fog->density);
+            _vox_sprintf(color, sizeof(color), "%u %u %u", fog->color.r, fog->color.g, fog->color.b);
+            _vox_sprintf(height, sizeof(height), "%.5f", fog->height);
+
+            uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+            _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+            _vox_file_write_uint32(fp, 0);
+            _vox_file_write_uint32(fp, 0);
+
+            _vox_file_write_uint32(fp, 4);
+            _vox_file_write_dict_key_value(fp, "_type", "_fog_uni");
+            _vox_file_write_dict_key_value(fp, "_d", density);
+            _vox_file_write_dict_key_value(fp, "_k", color);
+            _vox_file_write_dict_key_value(fp, "_h", height);
+
+            uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+            _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+        }
+
+        if (scene->post_process) {
+            const ogt_vox_post_process* post_process = scene->post_process;
+            char exposure[32] = "";
+            char vignette[32] = "";
+            char bloom_mix[32] = "";
+            char bloom_scale[32] = "";
+            char bloom_aspect[32] = "";
+            char bloom_threshold[32] = "";
+            const char* aces = post_process->aces ? "1" : "0";
+
+            _vox_sprintf(exposure, sizeof(exposure), "%.5f", post_process->exposure);
+            _vox_sprintf(vignette, sizeof(vignette), "%.5f", post_process->vignette);
+            _vox_sprintf(bloom_mix, sizeof(bloom_mix), "%.5f", post_process->bloom_mix);
+            _vox_sprintf(bloom_scale, sizeof(bloom_scale), "%.5f", post_process->bloom_scale);
+            _vox_sprintf(bloom_aspect, sizeof(bloom_aspect), "%.5f", post_process->bloom_aspect);
+            _vox_sprintf(bloom_threshold, sizeof(bloom_threshold), "%.5f", post_process->bloom_threshold);
+
+            {
+                uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+                _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+                _vox_file_write_uint32(fp, 0);
+                _vox_file_write_uint32(fp, 0);
+
+                _vox_file_write_uint32(fp, 4);
+                _vox_file_write_dict_key_value(fp, "_type", "_tone");
+                _vox_file_write_dict_key_value(fp, "_expo", exposure);
+                _vox_file_write_dict_key_value(fp, "_vig", vignette);
+                _vox_file_write_dict_key_value(fp, "_aces", aces);
+
+                uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+                _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            }
+            {
+                uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+                _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+                _vox_file_write_uint32(fp, 0);
+                _vox_file_write_uint32(fp, 0);
+
+                _vox_file_write_uint32(fp, 5);
+                _vox_file_write_dict_key_value(fp, "_type", "_bloom");
+                _vox_file_write_dict_key_value(fp, "_mix", bloom_mix);
+                _vox_file_write_dict_key_value(fp, "_scale", bloom_scale);
+                _vox_file_write_dict_key_value(fp, "_aspect", bloom_aspect);
+                _vox_file_write_dict_key_value(fp, "_threshold", bloom_threshold);
+
+                uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+                _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            }
+        }
+
+        if (scene->display) {
+            const ogt_vox_display* display = scene->display;
+            char ground_color[64] = "";
+            char ground_horizon[32] = "";
+            char edge_color[64] = "";
+            char edge_width[32] = "";
+            char grid_color[64] = "";
+            char grid_spacing[32] = "";
+            char grid_width[32] = "";
+            const char* show_ground = display->show_ground ? "1" : "0";
+            const char* show_grid = display->show_grid ? "1" : "0";
+            const char* show_edge = display->show_edge ? "1" : "0";
+
+            _vox_sprintf(ground_color, sizeof(ground_color), "%u %u %u", display->ground_color.r, display->ground_color.g, display->ground_color.b);
+            _vox_sprintf(ground_horizon, sizeof(ground_horizon), "%.5f", display->ground_horizon);
+            _vox_sprintf(edge_color, sizeof(edge_color), "%u %u %u", display->edge_color.r, display->edge_color.g, display->edge_color.b);
+            _vox_sprintf(edge_width, sizeof(edge_width), "%.5f", display->edge_width);
+            _vox_sprintf(grid_color, sizeof(grid_color), "%u %u %u", display->grid_color.r, display->grid_color.g, display->grid_color.b);
+            _vox_sprintf(grid_spacing, sizeof(grid_spacing), "%u", display->grid_spacing);
+            _vox_sprintf(grid_width, sizeof(grid_width), "%.5f", display->grid_width);
+
+            {
+                uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+                _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+                _vox_file_write_uint32(fp, 0);
+                _vox_file_write_uint32(fp, 0);
+
+                _vox_file_write_uint32(fp, 3);
+                _vox_file_write_dict_key_value(fp, "_type", "_ground");
+                _vox_file_write_dict_key_value(fp, "_color", ground_color);
+                _vox_file_write_dict_key_value(fp, "_horizon", ground_horizon);
+
+                uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+                _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            }
+            {
+                uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+                _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+                _vox_file_write_uint32(fp, 0);
+                _vox_file_write_uint32(fp, 0);
+
+                _vox_file_write_uint32(fp, 3);
+                _vox_file_write_dict_key_value(fp, "_type", "_edge");
+                _vox_file_write_dict_key_value(fp, "_color", edge_color);
+                _vox_file_write_dict_key_value(fp, "_width", edge_width);
+
+                uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+                _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            }
+            {
+                uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+                _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+                _vox_file_write_uint32(fp, 0);
+                _vox_file_write_uint32(fp, 0);
+
+                _vox_file_write_uint32(fp, 4);
+                _vox_file_write_dict_key_value(fp, "_type", "_grid");
+                _vox_file_write_dict_key_value(fp, "_color", grid_color);
+                _vox_file_write_dict_key_value(fp, "_spacing", grid_spacing);
+                _vox_file_write_dict_key_value(fp, "_width", grid_width);
+
+                uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+                _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            }
+            {
+                uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
+                _vox_file_write_uint32(fp, CHUNK_ID_rOBJ);
+                _vox_file_write_uint32(fp, 0);
+                _vox_file_write_uint32(fp, 0);
+
+                _vox_file_write_uint32(fp, 4);
+                _vox_file_write_dict_key_value(fp, "_type", "_setting");
+                _vox_file_write_dict_key_value(fp, "_ground", show_ground);
+                _vox_file_write_dict_key_value(fp, "_grid", show_grid);
+                _vox_file_write_dict_key_value(fp, "_edge", show_edge);
+
+                uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
+                _vox_file_write_uint32_at_offset(fp, offset_of_chunk_header + 4, &chunk_size);
+            }
         }
 
         // write out RGBA chunk for the palette
@@ -2967,6 +3533,15 @@
                 matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_sp)    ? 1 : 0;
                 matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_g)     ? 1 : 0;
                 matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_media) ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_ri)    ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_plastic) ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_g0)      ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_g1)      ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_gw)      ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_spec_p)  ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_absorb)  ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_scatter) ? 1 : 0;
+                matl_dict_keyvalue_count += (matl.content_flags & k_ogt_vox_matl_have_sss)     ? 1 : 0;
 
                 uint32_t offset_of_chunk_header = _vox_file_get_offset(fp);
 
@@ -2992,6 +3567,9 @@
                 }
                 if (matl.content_flags & k_ogt_vox_matl_have_ior) {
                     _vox_file_write_dict_key_value_float(fp, "_ior", matl.ior);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_ri) {
+                    _vox_file_write_dict_key_value_float(fp, "_ri", matl.ri);
                 }
                 if (matl.content_flags & k_ogt_vox_matl_have_att) {
                     _vox_file_write_dict_key_value_float(fp, "_att", matl.att);
@@ -3022,6 +3600,30 @@
                 }
                 if (matl.content_flags & k_ogt_vox_matl_have_media) {
                     _vox_file_write_dict_key_value_float(fp, "_media", matl.media);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_plastic) {
+                    _vox_file_write_dict_key_value_float(fp, "_plastic", matl.plastic);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_g0) {
+                    _vox_file_write_dict_key_value_float(fp, "_g0", matl.g0);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_g1) {
+                    _vox_file_write_dict_key_value_float(fp, "_g1", matl.g1);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_gw) {
+                    _vox_file_write_dict_key_value_float(fp, "_gw", matl.gw);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_spec_p) {
+                    _vox_file_write_dict_key_value_float(fp, "_spec_p", matl.spec_p);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_absorb) {
+                    _vox_file_write_dict_key_value_float(fp, "_absorb", matl.absorb);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_scatter) {
+                    _vox_file_write_dict_key_value_float(fp, "_scatter", matl.scatter);
+                }
+                if (matl.content_flags & k_ogt_vox_matl_have_sss) {
+                    _vox_file_write_dict_key_value_float(fp, "_sss", matl.sss);
                 }
                 // compute and patch up the chunk size in the chunk header
                 uint32_t chunk_size = _vox_file_get_offset(fp) - offset_of_chunk_header - CHUNK_HEADER_LEN;
