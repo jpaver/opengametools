@@ -8,6 +8,7 @@
 #include <io.h>
 #endif
 #include <stdio.h>
+#include <math.h>
 
 inline uint32_t count_solid_voxels_in_model(const ogt_vox_model *model) {
   uint32_t solid_voxel_count = 0;
@@ -206,7 +207,7 @@ inline const char *loadsave_vox_scene(const char *filename) {
 
 #define ASSERT_EQ_FLOAT(exp, actual)                                           \
   if (lastExpectedFloat = (actual),                                            \
-      abs((exp) - lastExpectedFloat) > (epsilon)) {                            \
+      fabsf((exp) - lastExpectedFloat) > (epsilon)) {                          \
     snprintf(                                                                  \
         errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
         " - " TEST_STRINGIFY(actual) ": expected %f, but got %f (line %i)\n",  \
@@ -217,7 +218,7 @@ inline const char *loadsave_vox_scene(const char *filename) {
 
 #define EXPECT_EQ_FLOAT(exp, actual, epsilon)                                  \
   if (lastExpectedFloat = (actual),                                            \
-      abs((exp) - lastExpectedFloat) > (epsilon)) {                            \
+      fabsf((exp) - lastExpectedFloat) > (epsilon)) {                          \
     snprintf(                                                                  \
         errorBuf + strlen(errorBuf), sizeof(errorBuf) - strlen(errorBuf),      \
         " - " TEST_STRINGIFY(actual) ": expected %f, but got %f (line %i)\n",  \
