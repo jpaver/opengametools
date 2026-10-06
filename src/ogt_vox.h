@@ -512,6 +512,10 @@
 //
 //-----------------------------------------------------------------------------------------------------------------
 #ifdef OGT_VOX_IMPLEMENTATION
+    // upper bounds for the SIZE chunk. MagicaVoxel itself authors at most 256 voxels per axis.
+    static const uint32_t k_vox_max_dimension   = 65536u;
+    static const uint64_t k_vox_max_voxel_count = 1024ull * 1024ull * 1024ull;
+
     // callers can override asserts in ogt_vox by defining their own macro before the implementation
 #ifndef ogt_assert
     #include <assert.h>
@@ -1556,7 +1560,16 @@
                     uint32_t num_voxels_in_chunk = 0;
                     _vox_file_read_uint32(fp, &num_voxels_in_chunk);
                     if (num_voxels_in_chunk != 0 || (read_flags & k_read_scene_flags_keep_empty_models_instances)) {
-                        uint32_t voxel_count = size_x * size_y * size_z;
+                        if (size_x > k_vox_max_dimension || size_y > k_vox_max_dimension || size_z > k_vox_max_dimension) {
+                            ogt_assert(false, "SIZE chunk dimension is implausibly large");
+                            return NULL;
+                        }
+                        const uint64_t voxel_count_64 = (uint64_t)size_x * (uint64_t)size_y * (uint64_t)size_z;
+                        if (voxel_count_64 > k_vox_max_voxel_count) {
+                            ogt_assert(false, "SIZE chunk describes too many voxels");
+                            return NULL;
+                        }
+                        uint32_t voxel_count = (uint32_t)voxel_count_64;
                         ogt_vox_model * model = (ogt_vox_model*)_vox_calloc(sizeof(ogt_vox_model) + voxel_count);        // 1 byte for each voxel
                         if (!model)
                             return NULL;
