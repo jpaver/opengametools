@@ -231,6 +231,7 @@
     #define _vox_le32toh(x)  (x)
 #endif
 
+extern "C" {
     // denotes an invalid group index. Usually this is only applicable to the scene's root group's parent.
     static const uint32_t k_invalid_group_index = UINT32_MAX;
     // denotes an invalid layer index. Can happen for instances and groups at least.
@@ -502,6 +503,7 @@
     //  ogt_vox_sample_group_transform_local returns the transform relative to its parent group
     ogt_vox_transform ogt_vox_sample_group_transform_global(const ogt_vox_group* group, uint32_t frame_index, const ogt_vox_scene* scene);
     ogt_vox_transform ogt_vox_sample_group_transform_local(const ogt_vox_group* group, uint32_t frame_index);
+} // extern "C"
 
 #endif // OGT_VOX_H__
 
